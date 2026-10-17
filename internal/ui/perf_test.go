@@ -109,3 +109,32 @@ func TestPerfLongLine(t *testing.T) {
 	}
 	t.Logf("draw at line end: %v per frame", time.Since(start)/20)
 }
+
+func TestPerfStartup(t *testing.T) {
+	dir := os.Getenv("TUI_STARTUP_DIR")
+	if dir == "" {
+		t.Skip("set TUI_STARTUP_DIR")
+	}
+	start := time.Now()
+	a, err := New(Options{Paths: []string{dir}, NoLSP: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("New: %v", time.Since(start))
+	s := tcell.NewSimulationScreen("UTF-8")
+	_ = s.Init()
+	s.SetSize(200, 50)
+	a.attachScreen(s)
+	start = time.Now()
+	a.draw()
+	t.Logf("first draw: %v", time.Since(start))
+	start = time.Now()
+	files := listFiles(a.root, a.gitRoot, a.excludeMatcher())
+	t.Logf("file index: %d files in %v", len(files), time.Since(start))
+	start = time.Now()
+	a.quickAccess("")
+	q := a.quick
+	q.input.SetText("toxen")
+	q.onChange()
+	t.Logf("quick open filter: %v (%d results)", time.Since(start), len(q.filtered))
+}

@@ -743,6 +743,44 @@ func (a *App) registerCommands() {
 	a.cmd("explorer.newFolder", "File", "New Folder...", func(any) { a.explorer.newEntry(true) })
 	a.cmd("workbench.files.action.refreshFilesExplorer", "File", "Refresh Explorer", func(any) { a.explorer.refresh() })
 	a.cmd("workbench.files.action.collapseExplorerFolders", "File", "Collapse Folders in Explorer", func(any) { a.explorer.collapseAll() })
+	a.cmd("workbench.files.action.compareFileWith", "File", "Compare Active File With...", a.ed(func(v *EditorView) {
+		items := a.fileItems()
+		a.openQuick(&QuickPick{Placeholder: "Select a file to compare with", Items: items, MatchDescription: true, OnAccept: func(it *QuickItem, q string) {
+			if it == nil {
+				return
+			}
+			other := it.Data.(string)
+			data, err := os.ReadFile(other)
+			if err != nil {
+				a.notify(NotifyError, err.Error())
+				return
+			}
+			a.openDiffPage(v.doc.Title()+" ↔ "+filepath.Base(other), v.buf().Path, v.buf().Text(), string(data))
+		}})
+	}))
+	a.cmd("workbench.action.files.rename", "File", "Rename...", a.ed(func(v *EditorView) {
+		old := v.buf().Path
+		if old == "" {
+			a.saveActive(true)
+			return
+		}
+		a.promptInput("Rename", "New file name", filepath.Base(old), func(name string) {
+			if name == "" || name == filepath.Base(old) {
+				return
+			}
+			target := filepath.Join(filepath.Dir(old), name)
+			if fileExists(target) {
+				a.notify(NotifyError, "A file named '"+name+"' already exists.")
+				return
+			}
+			if err := fsRename(old, target); err != nil {
+				a.notify(NotifyError, "Rename failed: "+err.Error())
+				return
+			}
+			a.onFileRenamed(old, target)
+			a.explorer.refreshSoon()
+		})
+	}))
 	a.cmd("workbench.files.action.compareWithSaved", "File", "Compare Active File with Saved", a.ed(func(v *EditorView) { a.compareWithSaved(v) }))
 	a.cmd("workbench.files.action.focusOpenEditorsView", "File", "Focus on Open Editors View", func(any) { a.showAllEditors() })
 	a.cmd("workbench.action.compareEditor.nextChange", "Compare", "Go to Next Change", a.ed(func(v *EditorView) { a.gotoChange(v, 1) }))

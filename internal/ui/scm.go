@@ -429,6 +429,7 @@ func (a *App) registerGitCommands() {
 		}()
 	})
 	a.cmd("git.refresh", "Git", "Refresh", func(any) { a.refreshGit() })
+	a.cmd("git.clone", "Git", "Clone", func(any) { a.gitClone() })
 	a.cmd("git.openChange", "Git", "Open Changes", a.ed(func(v *EditorView) {
 		if v.buf().Path != "" {
 			a.openGitDiff(v.buf().Path, false)
@@ -974,5 +975,41 @@ func (s *SCMView) draw(r Rect) {
 			s.scroll = clampInt(s.scroll+ev.WheelDY*3, 0, max(len(s.rows)-h, 0))
 		}
 		return true
+	})
+}
+
+// gitClone clones a repository into a chosen folder and opens it.
+func (a *App) gitClone() {
+	a.promptInput("Git: Clone", "Provide repository URL", "", func(url string) {
+		if url == "" {
+			return
+		}
+		home, _ := os.UserHomeDir()
+		name := strings.TrimSuffix(filepath.Base(strings.TrimRight(url, "/")), ".git")
+		parent := filepath.Dir(a.root)
+		if a.root == "" {
+			parent = home
+		}
+		a.promptInput("Git: Clone", "Folder to clone into", filepath.Join(parent, name), func(dest string) {
+			if dest == "" {
+				return
+			}
+			dest = expandHome(dest)
+			if err := checkSandbox(dest); err != nil {
+				a.notify(NotifyError, err.Error())
+				return
+			}
+			a.setStatusMessage("Cloning " + url + "...")
+			go func() {
+				_, err := git.Run(filepath.Dir(dest), "clone", url, dest)
+				a.Post(func() {
+					if err != nil {
+						a.notify(NotifyError, "Git clone failed: "+firstLine(err.Error()))
+						return
+					}
+					a.notify(NotifyInfo, "Cloned "+url, NotifyAction{Label: "Open", Run: func() { a.openFolder(dest) }})
+				})
+			}()
+		})
 	})
 }
