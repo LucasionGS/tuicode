@@ -178,6 +178,11 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	}
 	// active indent guide
 	guideX, guideFrom, guideTo := v.activeIndentGuide()
+	bracketColors := a.settings.Bool("editor.bracketPairColorization.enabled", "")
+	a.maybeRequestInlayHints(v)
+	if v.doc.semVersion != v.buf().Version() && v.doc.semTimer == nil {
+		a.scheduleSemanticTokens(v.doc)
+	}
 
 	lineHL := a.settings.String("editor.renderLineHighlight", "")
 	hlBg := bgc
@@ -315,7 +320,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 				for si < len(spans) && spans[si].End <= c.col {
 					si++
 				}
-				if si < len(spans) && spans[si].Start <= c.col && a.settings.Bool("editor.bracketPairColorization.enabled", "") || si < len(spans) && spans[si].Start <= c.col && spans[si].Kind != syntax.KBracket {
+				if sk, ok := v.doc.semanticAt(line, c.col); ok {
+					st = th.Token(sk).Apply(st)
+				} else if si < len(spans) && spans[si].Start <= c.col && (bracketColors || spans[si].Kind != syntax.KBracket) {
 					sp := spans[si]
 					if sp.Kind == syntax.KBracket {
 						st = st.Foreground(th.C(fmt.Sprintf("editorBracketHighlight.foreground%d", int(sp.Depth)+1)))
@@ -795,50 +802,57 @@ func (v *EditorView) activeIndentGuide() (int, int, int) {
 	return sInd, start + 1, end
 }
 
+// stickyChain returns the scope header lines that contain line, outermost first.
+func (v *EditorView) stickyChain(line int) []int {
+	b := v.buf()
+	if line >= b.LineCount() || line <= 0 {
+		return nil
+	}
+	ind := v.indentLevel(line)
+	if ind < 0 {
+		ind = v.blankLineIndent(line)
+	} else if isClosingLine(b.LineString(line)) {
+		// a closing bracket still belongs to the block it closes
+		ind++
+	}
+	var chain []int
+	for l := line - 1; l >= 0 && ind > 0 && l > line-5000; l-- {
+		li := v.indentLevel(l)
+		if li < 0 || li >= ind {
+			continue
+		}
+		if f, ok := v.foldRangeAt(l); ok && (f.End >= line || f.End+1 == line && isClosingLine(b.LineString(line))) {
+			chain = append([]int{l}, chain...)
+		}
+		ind = li
+	}
+	return chain
+}
+
+func isClosingLine(s string) bool {
+	t := strings.TrimSpace(s)
+	return t != "" && (strings.HasPrefix(t, "}") || strings.HasPrefix(t, ")") || strings.HasPrefix(t, "]") || t == "end" || strings.HasPrefix(t, "</"))
+}
+
 // computeSticky finds the scope header lines for sticky scroll.
 func (v *EditorView) computeSticky() []int {
+	if v.topLine == 0 && v.topSeg == 0 {
+		return nil
+	}
 	maxN := v.app.settings.Int("editor.stickyScroll.maxLineCount", "", 5)
-	var result []int
-	for iter := 0; iter < 2; iter++ {
-		top := v.topLine + len(result)
-		if top >= v.buf().LineCount() || v.topLine == 0 && v.topSeg == 0 {
-			return nil
+	maxN = min(maxN, max(v.rect.H/2-1, 0))
+	// the sticky area covers k rows; the scopes shown belong to the first line below it
+	var c []int
+	for k := 0; k <= maxN; k++ {
+		c = v.stickyChain(v.topLine + k)
+		if len(c) > maxN {
+			c = c[len(c)-maxN:]
 		}
-		ind := v.indentLevel(top)
-		if ind < 0 {
-			ind = v.blankLineIndent(top)
-		}
-		var chain []int
-		for l := top - 1; l >= 0 && ind > 0; l-- {
-			li := v.indentLevel(l)
-			if li < 0 || li >= ind {
-				continue
-			}
-			if f, ok := v.foldRangeAt(l); ok && f.End >= top {
-				chain = append([]int{l}, chain...)
-			}
-			ind = li
-		}
-		if len(chain) > maxN {
-			chain = chain[len(chain)-maxN:]
-		}
-		if len(chain) == len(result) {
-			result = chain
-			break
-		}
-		result = chain
-	}
-	// drop headers that are actually visible
-	out := result[:0]
-	for _, l := range result {
-		if l < v.topLine+len(result) {
-			out = append(out, l)
+		if len(c) <= k {
+			return c
 		}
 	}
-	if len(out) >= v.rect.H/2 {
-		out = out[:max(v.rect.H/2-1, 0)]
-	}
-	return out
+	return c
 }
 
 // computeHighlights fills word occurrence highlights for the cursor word.

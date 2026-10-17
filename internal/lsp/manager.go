@@ -163,6 +163,8 @@ func (m *Manager) ServerCommand(lang *syntax.Language) []string {
 func (m *Manager) initOptions(cmd []string) any {
 	base := filepath.Base(cmd[0])
 	switch base {
+	case "gopls":
+		return map[string]any{"semanticTokens": true, "usePlaceholders": false}
 	case "deno":
 		return map[string]any{"enable": true, "lint": true, "unstable": true}
 	case "vscode-json-language-server", "vscode-json-languageserver":

@@ -99,6 +99,7 @@ var Defaults = map[string]any{
 	"editor.codeActionsOnSave":                    map[string]any{},
 	"editor.defaultFormatter":                     nil,
 	"editor.glyphMargin":                          true,
+	"editor.semanticHighlighting.enabled":         true,
 	"editor.smoothScrolling":                      false,
 	"editor.unicodeHighlight.ambiguousCharacters": true,
 	"files.trimTrailingWhitespace":                false,

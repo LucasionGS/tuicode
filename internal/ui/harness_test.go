@@ -18,7 +18,7 @@ type harness struct {
 
 func newHarness(t *testing.T, w, h int, opts Options) *harness {
 	t.Helper()
-	opts.NoLSP = true
+	opts.NoLSP = os.Getenv("TUI_LSP") == ""
 	a, err := New(opts)
 	if err != nil {
 		t.Fatal(err)

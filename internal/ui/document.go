@@ -52,6 +52,10 @@ type Document struct {
 	Virtual bool
 	// HighlightOff disables syntax highlighting for very large files.
 	HighlightOff bool
+
+	semSpans   [][]syntax.Span
+	semVersion int
+	semTimer   *time.Timer
 }
 
 func (a *App) newDocument(buf *buffer.Buffer) *Document {
@@ -133,6 +137,21 @@ func (a *App) onDocChange(d *Document, ch buffer.Change) {
 			}
 		}
 	}
+	if delta := newLines - oldLines; delta != 0 && d.semSpans != nil {
+		at := ch.Old.Start.Line + 1
+		if at <= len(d.semSpans) {
+			if delta > 0 {
+				ins := make([][]syntax.Span, delta)
+				d.semSpans = append(d.semSpans[:at], append(ins, d.semSpans[at:]...)...)
+			} else {
+				end := min(at-delta, len(d.semSpans))
+				d.semSpans = append(d.semSpans[:at], d.semSpans[end:]...)
+			}
+		}
+	}
+	if ch.Old.Start.Line < len(d.semSpans) && ch.Old.Start.Line == ch.NewEnd.Line {
+		shiftSpans(d.semSpans, ch)
+	}
 	if ch.Old.Start.Line < len(d.spans) {
 		// the edited line's spans are probably off; drop them only for single-line edits
 		// to avoid flicker on large changes
@@ -147,6 +166,7 @@ func (a *App) onDocChange(d *Document, ch buffer.Change) {
 	}
 	a.requestHighlight(d)
 	a.scheduleGitDiff(d)
+	a.scheduleSemanticTokens(d)
 	a.docChanged(d)
 }
 

@@ -235,6 +235,8 @@ func (a *App) triggerCompletion(v *EditorView, explicit bool, triggerChar string
 	c.selected = 0
 	c.scroll = 0
 	words := a.wordCompletions(v, c.start)
+	snips := a.snippetCompletions(v.lang())
+	words = append(snips, words...)
 	if a.lsp != nil {
 		kind := 1
 		ctx := map[string]any{"triggerKind": kind}
@@ -282,6 +284,8 @@ func (a *App) triggerCompletion(v *EditorView, explicit bool, triggerChar string
 			}
 			if len(items) == 0 && a.settings.String("editor.wordBasedSuggestions", v.lang()) != "off" {
 				items = words
+			} else {
+				items = append(items, snips...)
 			}
 			c.items = items
 			_ = version

@@ -703,6 +703,8 @@ func (a *App) registerCommands() {
 		a.OpenFile(config.UserKeybindingsPath(), false)
 	})
 	a.cmd("workbench.action.selectTheme", "Preferences", "Color Theme", func(any) { a.pickTheme() })
+	a.cmd("workbench.action.openSnippets", "Snippets", "Configure Snippets", func(any) { a.configureSnippets() })
+	a.cmd("editor.action.insertSnippet", "Snippets", "Insert Snippet", a.ed(func(v *EditorView) { a.insertSnippetPicker(v) }))
 	a.cmd("workbench.action.selectIconTheme", "Preferences", "File Icon Theme", func(any) { a.pickIconTheme() })
 	a.cmd("workbench.action.reloadWindow", "Developer", "Reload Window", func(any) {
 		a.loadSettings()

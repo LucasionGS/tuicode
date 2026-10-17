@@ -3,8 +3,8 @@ package ui
 import (
 	"fmt"
 	"os"
-	"runtime/debug"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
@@ -197,6 +197,7 @@ type App struct {
 	fileIdx             *fileIndex
 	keyLabels           map[string]string
 	panics              int
+	snippets            *snippetCache
 }
 
 type navEntry struct {

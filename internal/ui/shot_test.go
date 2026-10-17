@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+
 	"path/filepath"
 	"testing"
+	"tuicode/internal/buffer"
 )
 
 // TestScreenshot writes snapshots when TUI_SHOT is set to an output folder.
@@ -72,4 +74,30 @@ func TestScreenshotStates(t *testing.T) {
 	h.a.RunCommand("workbench.view.scm", nil)
 	h.settle()
 	h.snapshot(filepath.Join(out, "scm.json"))
+}
+
+func TestScreenshotLSP(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT and TUI_LSP")
+	}
+	wd, _ := os.Getwd()
+	root := filepath.Dir(filepath.Dir(wd))
+	_ = os.Chdir(root)
+	defer os.Chdir(wd)
+	h := newHarness(t, 150, 42, Options{Paths: []string{filepath.Join(root, "internal/buffer/buffer.go")}})
+	for i := 0; i < 60; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+		if v := h.a.ActiveView(); v != nil && v.doc.semSpans != nil {
+			break
+		}
+	}
+	h.settle()
+	v := h.a.ActiveView()
+	v.SetCursor(v.buf().Clamp(buffer.Pos{Line: 95, Col: 10}))
+	v.ensurePosVisible(v.Cursor(), true)
+	h.settle()
+	h.snapshot(filepath.Join(out, "lsp.json"))
+	h.a.lsp.ShutdownAll()
 }
