@@ -61,8 +61,9 @@ type Document struct {
 	conflictStarts  map[int]bool
 	conflictVersion int
 
-	tests        map[int]string // Go test functions by line
+	tests        map[int]string // test functions by line
 	testsVersion int
+	testKind     string
 
 	mdFences       []bool // lines inside fenced code blocks
 	mdFenceVersion int

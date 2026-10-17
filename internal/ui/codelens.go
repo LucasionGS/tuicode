@@ -42,7 +42,11 @@ func (v *EditorView) lensRows(line int) int {
 
 // testLensesEnabled mirrors the Go extension's "go.enableCodeLens": {"runtest": true}.
 func (v *EditorView) testLensesEnabled() bool {
-	if v.lang() != "go" {
+	switch v.lang() {
+	case "typescript", "typescriptreact", "javascript", "javascriptreact":
+		return v.app.settings.Bool("deno.codeLens.test", "")
+	case "go":
+	default:
 		return false
 	}
 	m, ok := v.app.settings.Get("go.enableCodeLens", "go").(map[string]any)
@@ -62,6 +66,10 @@ func (v *EditorView) testLenses(line int) []*codeLens {
 		return nil
 	}
 	a := v.app
+	if v.doc.testKind == "deno" {
+		// the Deno extension's lens
+		return []*codeLens{{line: line, command: &lsp.Command{Title: "▶ Run Test"}, run: func() { a.runTests([]*testCase{a.testAt(v.doc, line)}) }}}
+	}
 	return []*codeLens{
 		{line: line, command: &lsp.Command{Title: "run test"}, run: func() { a.runTests([]*testCase{a.testAt(v.doc, line)}) }},
 		{line: line, command: &lsp.Command{Title: "debug test"}, run: func() { a.debugTest(a.testAt(v.doc, line)) }},

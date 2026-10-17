@@ -84,3 +84,40 @@ func TestDebugGoTest(t *testing.T) {
 	}
 	h.a.debug.stop()
 }
+
+func TestDenoTesting(t *testing.T) {
+	if _, err := exec.LookPath("deno"); err != nil {
+		t.Skip("deno not installed")
+	}
+	src := "Deno.test(\"adds\", () => {\n  if (1 + 1 !== 2) throw new Error(\"bad\");\n});\n\nDeno.test(\"broken thing\", () => {\n  throw new Error(\"expected 3 got 4\");\n});\n"
+	dir := tempWorkspace(t, map[string]string{"deno.json": "{}\n", "main_test.ts": src})
+	t.Setenv("DENO_DIR", t.TempDir())
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "main_test.ts")}})
+	v := h.a.ActiveView()
+	if tests := v.doc.testsInDoc(); len(tests) != 2 || tests[0] != "adds" || tests[4] != "broken thing" {
+		t.Fatalf("discovered: %v", tests)
+	}
+	h.flush()
+	if !h.contains("▶ Run Test") {
+		h.dump()
+		t.Fatal("deno test lens missing")
+	}
+	h.a.RunCommand("testing.runCurrentFile", nil)
+	adds, broken := h.a.testAt(v.doc, 0), h.a.testAt(v.doc, 4)
+	for i := 0; i < 1000 && (h.a.testing.running != nil || adds.status < testPassed || broken.status < testPassed); i++ {
+		time.Sleep(20 * time.Millisecond)
+		h.flush()
+	}
+	if adds.status != testPassed || broken.status != testFailed {
+		t.Fatalf("statuses: adds %d broken %d", adds.status, broken.status)
+	}
+	found := false
+	for _, d := range v.doc.Diags {
+		if d.Range.Start.Line == 5 && strings.Contains(d.Message, "expected 3 got 4") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics: %+v", v.doc.Diags)
+	}
+}

@@ -35,10 +35,11 @@ const (
 )
 
 type testCase struct {
+	kind    string // "go" or "deno"
 	name    string
 	file    string
 	line    int
-	dir     string // package directory
+	dir     string // the group the test runs in: the package directory for Go, the file for Deno
 	status  testStatus
 	elapsed float64
 	output  []string
@@ -87,17 +88,73 @@ func goTestsIn(lines []string) map[int]string {
 	return out
 }
 
-// testsInDoc returns the test functions of an open *_test.go document by line (cached per version).
-func (d *Document) testsInDoc() map[int]string {
-	if !strings.HasSuffix(d.Buf.Path, "_test.go") {
-		return nil
+var denoTestRe = regexp.MustCompile(`Deno\.test(?:\.only|\.ignore)?\(\s*(?:"([^"]+)"|'([^']+)'|` + "`([^`]+)`" + `|\{\s*name:\s*["'` + "`" + `]([^"'` + "`" + `]+)|(?:async\s+)?function\s+(\w+))`)
+
+// denoTestsIn finds Deno.test("name", ...) declarations.
+func denoTestsIn(lines []string) map[int]string {
+	out := map[int]string{}
+	for i, l := range lines {
+		if !strings.Contains(l, "Deno.test") {
+			continue
+		}
+		if m := denoTestRe.FindStringSubmatch(l); m != nil {
+			for _, g := range m[1:] {
+				if g != "" {
+					out[i] = g
+					break
+				}
+			}
+		}
 	}
+	return out
+}
+
+// testKind tells which test runner a file belongs to.
+func testKind(path string, text func() string) string {
+	if strings.HasSuffix(path, "_test.go") {
+		return "go"
+	}
+	switch filepath.Ext(path) {
+	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs":
+		if strings.Contains(text(), "Deno.test") {
+			return "deno"
+		}
+	}
+	return ""
+}
+
+func testsInSource(kind string, lines []string) map[int]string {
+	switch kind {
+	case "go":
+		return goTestsIn(lines)
+	case "deno":
+		return denoTestsIn(lines)
+	}
+	return nil
+}
+
+// testsInDoc returns the tests of an open document by line (cached per version).
+func (d *Document) testsInDoc() map[int]string {
 	if d.testsVersion == d.Buf.Version()+1 {
 		return d.tests
 	}
-	d.tests = goTestsIn(d.Buf.Lines())
 	d.testsVersion = d.Buf.Version() + 1
+	d.tests, d.testKind = nil, ""
+	switch filepath.Ext(d.Buf.Path) {
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs":
+		lines := d.Buf.Lines()
+		d.testKind = testKind(d.Buf.Path, func() string { return strings.Join(lines, "\n") })
+		d.tests = testsInSource(d.testKind, lines)
+	}
 	return d.tests
+}
+
+// testGroup returns where a test runs: its package for Go, its file for Deno.
+func testGroup(kind, file string) string {
+	if kind == "go" {
+		return filepath.Dir(file)
+	}
+	return file
 }
 
 // testAt returns the test case declared on a line of an open document.
@@ -106,11 +163,11 @@ func (a *App) testAt(d *Document, line int) *testCase {
 	if !ok {
 		return nil
 	}
-	dir := filepath.Dir(d.Buf.Path)
+	dir := testGroup(d.testKind, d.Buf.Path)
 	tv := a.testing
 	t := tv.tests[dir+"\x00"+name]
 	if t == nil {
-		t = &testCase{name: name, dir: dir}
+		t = &testCase{kind: d.testKind, name: name, dir: dir}
 		tv.tests[t.key()] = t
 	}
 	t.file, t.line = d.Buf.Path, line
@@ -130,7 +187,8 @@ func (tv *TestingView) scan() {
 	tv.scanning = true
 	var testFiles []string
 	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
+		base := filepath.Base(f)
+		if strings.HasSuffix(f, "_test.go") || strings.Contains(base, "_test.") || strings.Contains(base, ".test.") {
 			testFiles = append(testFiles, f)
 		}
 	}
@@ -141,8 +199,9 @@ func (tv *TestingView) scan() {
 			if err != nil {
 				continue
 			}
-			for line, name := range goTestsIn(strings.Split(string(data), "\n")) {
-				t := testCase{name: name, file: f, line: line, dir: filepath.Dir(f)}
+			kind := testKind(f, func() string { return string(data) })
+			for line, name := range testsInSource(kind, strings.Split(string(data), "\n")) {
+				t := testCase{kind: kind, name: name, file: f, line: line, dir: testGroup(kind, f)}
 				found[t.key()] = t
 			}
 		}
@@ -304,7 +363,12 @@ func (a *App) runTests(cases []*testCase) {
 		for _, t := range byDir[dir] {
 			names = append(names, regexp.QuoteMeta(t.name))
 		}
-		args := []string{"test", "-json", "-run", "^(" + strings.Join(names, "|") + ")$", "."}
+		filter := "^(" + strings.Join(names, "|") + ")$"
+		if byDir[dir][0].kind == "deno" {
+			a.runDenoTests(dir, filter, byDir[dir], func() { runNext(i + 1) })
+			return
+		}
+		args := []string{"test", "-json", "-run", filter, "."}
 		cmd := exec.Command("go", args...)
 		cmd.Dir = dir
 		cmd.Env = os.Environ()
@@ -721,7 +785,7 @@ func (tv *TestingView) rowMenu(rw testRow) []MenuItem {
 	if rw.test != nil {
 		t := rw.test
 		items = append(items,
-			MenuItem{Label: "Debug Test", Run: func() { a.debugTest(t) }},
+			MenuItem{Label: "Debug Test", Disabled: t.kind != "go", Run: func() { a.debugTest(t) }},
 			MenuItem{Separator: true},
 			MenuItem{Label: "Go to Test", Run: func() { tv.reveal(t) }},
 			MenuItem{Label: "Peek Output", Disabled: len(t.output) == 0, Run: func() { tv.showOutput(t) }},
@@ -797,3 +861,133 @@ func (a *App) openVirtualDoc(title, text, lang string) *EditorView {
 	a.focusEditor()
 	return v
 }
+
+//#region Deno
+
+// runDenoTests runs the tests of one file with `deno test --reporter=tap`.
+func (a *App) runDenoTests(file, filter string, cases []*testCase, done func()) {
+	tv := a.testing
+	args := []string{"test", "--reporter=tap"}
+	for _, x := range a.settings.List("deno.testing.args", "") {
+		if s, ok := x.(string); ok {
+			args = append(args, s)
+		}
+	}
+	args = append(args, "--filter", "/"+filter+"/", file)
+	cmd := exec.Command("deno", args...)
+	cmd.Dir = filepath.Dir(file)
+	for d := cmd.Dir; filepath.Dir(d) != d; d = filepath.Dir(d) {
+		if fileExists(filepath.Join(d, "deno.json")) || fileExists(filepath.Join(d, "deno.jsonc")) {
+			cmd.Dir = d
+			break
+		}
+	}
+	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+	out, err := cmd.StdoutPipe()
+	cmd.Stderr = cmd.Stdout
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		a.notify(NotifyError, "Failed to run deno test: "+err.Error())
+		tv.running = nil
+		return
+	}
+	tv.running = cmd
+	go func() {
+		// Example:
+		// ok 1 - adds
+		// not ok 2 - broken thing
+		//   ---
+		//   {"message":"Error: ...","severity":"fail","at":{"file":"./main_test.ts","line":5}}
+		//   ...
+		sc := bufio.NewScanner(out)
+		sc.Buffer(make([]byte, 64*1024), 4<<20)
+		failing := ""
+		for sc.Scan() {
+			line := stripANSI(sc.Text())
+			a.Post(func() { a.output.append("Test Results", line) })
+			switch {
+			case strings.HasPrefix(line, "ok "):
+				name := tapName(line[3:])
+				status := testPassed
+				if strings.Contains(strings.ToUpper(line), "# SKIP") {
+					status = testSkipped
+				}
+				a.Post(func() { a.denoResult(file, name, status, "") })
+			case strings.HasPrefix(line, "not ok "):
+				failing = tapName(line[7:])
+				name := failing
+				a.Post(func() { a.denoResult(file, name, testFailed, "") })
+			case failing != "" && strings.HasPrefix(strings.TrimSpace(line), "{"):
+				var block struct {
+					Message string `json:"message"`
+				}
+				if json.Unmarshal([]byte(strings.TrimSpace(line)), &block) == nil {
+					name, msg := failing, stripANSI(block.Message)
+					a.Post(func() { a.denoResult(file, name, testFailed, msg) })
+				}
+				failing = ""
+			}
+		}
+		_ = cmd.Wait()
+		a.Post(func() {
+			for _, t := range cases {
+				if t.status == testQueued || t.status == testRunning {
+					t.status = testFailed
+				}
+			}
+			tv.rebuild()
+			done()
+		})
+	}()
+}
+
+// tapName extracts the test name from "N - name # directive".
+func tapName(s string) string {
+	_, name, _ := strings.Cut(s, " - ")
+	if i := strings.Index(name, " # "); i >= 0 {
+		name = name[:i]
+	}
+	return strings.TrimSpace(name)
+}
+
+var denoStackRe = regexp.MustCompile(`file://(\S+?):(\d+):(\d+)`)
+
+// denoResult records a Deno test result; failure messages become diagnostics at the throwing line.
+func (a *App) denoResult(file, name string, status testStatus, message string) {
+	t := a.testing.tests[file+"\x00"+name]
+	if t == nil {
+		return
+	}
+	t.status = status
+	if message != "" {
+		t.output = append(t.output, strings.Split(message, "\n")...)
+		line := t.line
+		for _, m := range denoStackRe.FindAllStringSubmatch(message, -1) {
+			if m[1] == file {
+				n, _ := strconv.Atoi(m[2])
+				line = n - 1
+				break
+			}
+		}
+		if a.lsp != nil {
+			first, _, _ := strings.Cut(message, "\n")
+			existing := []lsp.Diagnostic{}
+			for _, fd := range a.lsp.Diagnostics(file) {
+				if fd.Server == "test" {
+					existing = fd.Diagnostics
+				}
+			}
+			a.lsp.SetDiagnostics(file, "test", append(existing, lsp.Diagnostic{
+				Range:    lsp.Range{Start: lsp.Position{Line: line}, End: lsp.Position{Line: line, Character: 1 << 20}},
+				Severity: lsp.SeverityError,
+				Source:   "test",
+				Message:  name + ": " + first,
+			}))
+		}
+	}
+	a.testing.rebuild()
+}
+
+//#endregion
