@@ -79,3 +79,76 @@ func TestMouse(t *testing.T) {
 		t.Fatal("tab click did not switch")
 	}
 }
+
+func TestMouseOverlays(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 200; i++ {
+		sb.WriteString("line number ")
+		sb.WriteString(strings.Repeat("x", i%7))
+		sb.WriteString("\n")
+	}
+	dir := tempWorkspace(t, map[string]string{"long.txt": sb.String()})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "long.txt")}})
+	v := h.a.ActiveView()
+	h.ctrl('f')
+	h.typeText("number")
+	f := v.find
+	if len(f.matches) != 200 {
+		t.Fatalf("matches %d", len(f.matches))
+	}
+	before := f.current
+	// click the "next match" arrow: it is the second button after the count
+	x, y := h.find("1 of 200")
+	_ = x
+	row := h.screen()[y]
+	idx := strings.Index(row, "1 of 200")
+	// buttons start after the count field (11 wide)
+	bx := len([]rune(row[:idx])) + 11 + 1
+	for i := 0; i < 6; i++ {
+		h.click(bx+i, y, tcell.Button1, 0)
+		if f.current != before {
+			break
+		}
+	}
+	if f.current == before {
+		h.dump()
+		t.Fatal("find widget buttons not clickable")
+	}
+	h.key(tcell.KeyEsc, 0, 0)
+	// scrollbar drag scrolls the editor
+	sx := v.full.X + v.full.W - 1
+	h.a.handleEvent(tcell.NewEventMouse(sx, v.full.Y+1, tcell.Button1, 0))
+	h.a.handleEvent(tcell.NewEventMouse(sx, v.full.Y+v.full.H-2, tcell.Button1, 0))
+	h.a.handleEvent(tcell.NewEventMouse(sx, v.full.Y+v.full.H-2, tcell.ButtonNone, 0))
+	h.flush()
+	if v.topLine < 100 {
+		t.Fatalf("scrollbar drag did not scroll: top=%d", v.topLine)
+	}
+	// wheel scroll up
+	top := v.topLine
+	h.a.handleEvent(tcell.NewEventMouse(v.rect.X+5, v.rect.Y+5, tcell.WheelUp, 0))
+	h.flush()
+	if v.topLine != top-3 {
+		t.Fatalf("wheel: %d -> %d", top, v.topLine)
+	}
+	// right click opens the context menu and an item runs
+	h.click(v.rect.X+3, v.rect.Y+3, tcell.Button2, 0)
+	if h.a.ctxMenu == nil {
+		t.Fatal("no context menu")
+	}
+	cx, cy := h.find("Command Palette...")
+	h.click(cx, cy, tcell.Button1, 0)
+	if h.a.quick == nil {
+		t.Fatal("context menu item did not run")
+	}
+	h.key(tcell.KeyEsc, 0, 0)
+	// sidebar sash drag
+	sash := h.a.rSidebar.X + h.a.rSidebar.W - 1
+	h.a.handleEvent(tcell.NewEventMouse(sash, 10, tcell.Button1, 0))
+	h.a.handleEvent(tcell.NewEventMouse(sash+10, 10, tcell.Button1, 0))
+	h.a.handleEvent(tcell.NewEventMouse(sash+10, 10, tcell.ButtonNone, 0))
+	h.flush()
+	if h.a.sidebarWidth < 38 {
+		t.Fatalf("sash drag: width %d", h.a.sidebarWidth)
+	}
+}

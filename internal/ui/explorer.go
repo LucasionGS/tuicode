@@ -1017,7 +1017,8 @@ func (e *Explorer) draw(r Rect) {
 					} else if ev.Clicks >= 2 {
 						e.open(node, false, true)
 					} else {
-						e.open(node, true, false)
+						// mouse clicks focus the editor; keyboard navigation keeps focus here
+						e.open(node, true, true)
 					}
 					// drag to move files
 					src := node

@@ -53,6 +53,7 @@ var Defaults = map[string]any{
 	"editor.minimap.enabled":                      true,
 	"editor.minimap.maxColumn":                    120.0,
 	"editor.minimap.renderCharacters":             true,
+	"editor.minimap.showSlider":                   "mouseover",
 	"editor.cursorStyle":                          "line",
 	"editor.cursorBlinking":                       "blink",
 	"editor.autoClosingBrackets":                  "languageDefined",

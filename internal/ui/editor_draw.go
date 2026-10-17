@@ -972,6 +972,9 @@ func (v *EditorView) drawMinimap(r Rect) {
 	if hover && th.Has("minimapSlider.hoverBackground") {
 		sliderBg = th.OverColor("minimapSlider.hoverBackground", bgc)
 	}
+	if !hover && a.settings.String("editor.minimap.showSlider", "") != "always" {
+		sliderBg = bgc
+	}
 	maxCol := r.W * 2 * charsPerDot
 	ts := v.tabSize()
 	for y := 0; y < r.H; y++ {

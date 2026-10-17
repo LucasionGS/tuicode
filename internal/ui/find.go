@@ -462,6 +462,7 @@ func (f *FindWidget) draw(er Rect) {
 	x := er.X + er.W - w - 2
 	y := er.Y
 	f.rect = Rect{x, y, w, h}
+	mark := a.hitMark()
 	bgc := th.C("editorWidget.background")
 	fgc := th.C("editorWidget.foreground")
 	base := styleFB(fgc, bgc)
@@ -652,7 +653,7 @@ func (f *FindWidget) draw(er Rect) {
 			a.cv.Set(sx, sy, ch, cst.Underline(false).Background(blendTcell(bgOf(cst), th.OverColor("widget.shadow", bgOf(cst)))))
 		}
 	}
-	a.addHit(f.rect, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, f.rect, func(ev MouseEvent) bool {
 		if ev.Kind == MousePress {
 			a.setFocus(FocusWidget)
 		}
