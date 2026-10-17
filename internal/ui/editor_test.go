@@ -268,3 +268,27 @@ func TestRegionFolding(t *testing.T) {
 		t.Fatal("fold not rendered")
 	}
 }
+
+func TestEmmet(t *testing.T) {
+	nodes, ok := parseEmmet("ul.list>li.item$*2>a")
+	if !ok {
+		t.Fatal("parse failed")
+	}
+	got := expandEmmet(nodes, false)
+	want := "<ul class=\"list\">\n\t<li class=\"item1\"><a href=\"$1\">$2</a></li>\n\t<li class=\"item2\"><a href=\"$3\">$4</a></li>\n</ul>$0"
+	if got != want {
+		t.Fatalf("expand:\n%s\nwant:\n%s", got, want)
+	}
+	dir := tempWorkspace(t, map[string]string{"index.html": "\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "index.html")}})
+	h.typeText("div.box>p")
+	v := h.a.ActiveView()
+	if v.completion == nil || !v.completion.visible() || !v.completion.filtered[0].emmet {
+		h.dump()
+		t.Fatal("emmet suggestion missing")
+	}
+	h.key(tcell.KeyTab, 0, 0)
+	if got := h.text(); got != "<div class=\"box\">\n    <p></p>\n</div>\n" {
+		t.Fatalf("emmet insert: %q", got)
+	}
+}

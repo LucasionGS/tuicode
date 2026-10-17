@@ -24,6 +24,7 @@ type citem struct {
 	word      bool
 	resolved  bool
 	docs      string
+	emmet     bool
 }
 
 // Completion is the suggest widget state for an editor.
@@ -110,8 +111,22 @@ func (a *App) afterType(v *EditorView, text string) {
 			isTrigger = true
 		}
 	}
+	emmetChar := emmetLangs[v.lang()] && strings.ContainsRune(".#>*+]}^$", ch)
 	if isTrigger && a.settings.Bool("editor.suggestOnTriggerCharacters", v.lang()) {
 		a.triggerCompletion(v, false, text)
+	} else if emmetChar && a.emmetCompletion(v) != nil {
+		if v.completion == nil {
+			v.completion = &Completion{v: v}
+		}
+		c := v.completion
+		if !c.active {
+			c.items = nil
+			c.active = true
+			c.explicit = false
+			c.loading = false
+		}
+		c.start = v.Cursor()
+		a.refilterCompletion(v)
 	} else if isWordRune(ch) {
 		if v.completion != nil && v.completion.active {
 			a.refilterCompletion(v)
@@ -383,6 +398,10 @@ func (a *App) refilterCompletion(v *EditorView) {
 		return
 	}
 	cur := v.Cursor()
+	em := a.emmetCompletion(v)
+	if em != nil && cur.Line == c.start.Line && cur.Less(c.start) {
+		c.start = cur
+	}
 	if cur.Line != c.start.Line || cur.Less(c.start) {
 		c.close()
 		return
@@ -424,6 +443,13 @@ func (a *App) refilterCompletion(v *EditorView) {
 		it.positions = pos
 		c.filtered = append(c.filtered, it)
 	}
+	defer func() {
+		if em != nil {
+			c.filtered = append([]*citem{em}, c.filtered...)
+			c.active = true
+			c.selected = 0
+		}
+	}()
 	if prefix == "" {
 		sort.SliceStable(c.filtered, func(i, j int) bool { return c.filtered[i].sortText < c.filtered[j].sortText })
 	} else {
@@ -622,6 +648,10 @@ func (c *Completion) accept() {
 		}
 		isSnippet = it.item.InsertTextFormat == 2
 		additional = it.item.AdditionalTextEdits
+	}
+	if it.emmet {
+		_, start := v.emmetAbbreviationBefore()
+		replace = buffer.Range{Start: buffer.Pos{Line: cur.Line, Col: start}, End: cur}
 	}
 	b.CloseUndoGroup()
 	if len(v.sels) > 1 {
