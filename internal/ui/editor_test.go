@@ -292,3 +292,31 @@ func TestEmmet(t *testing.T) {
 		t.Fatalf("emmet insert: %q", got)
 	}
 }
+
+func TestHotExit(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "original\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{dir}})
+	h.a.OpenFile(filepath.Join(dir, "a.txt"), false)
+	h.a.focusEditor()
+	h.typeText("changed ")
+	h.a.NewUntitled()
+	h.typeText("scratch notes")
+	h.a.requestQuit()
+	if !h.a.quit {
+		t.Fatal("quit should not prompt with hot exit")
+	}
+	h.a.saveSession()
+	data, _ := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if string(data) != "original\n" {
+		t.Fatalf("file was written: %q", data)
+	}
+	h2 := newHarness(t, 120, 40, Options{Paths: []string{dir}})
+	var texts []string
+	for _, d := range h2.a.docs {
+		texts = append(texts, d.Buf.Text())
+	}
+	joined := strings.Join(texts, "|")
+	if !strings.Contains(joined, "changed original") || !strings.Contains(joined, "scratch notes") {
+		t.Fatalf("restored: %q", joined)
+	}
+}
