@@ -717,15 +717,24 @@ func (a *App) drawPanel() {
 	a.cv.clip = r
 	bgc := th.C("panel.background")
 	a.cv.Fill(r, ' ', styleFB(th.C("foreground"), bgc))
-	// top border
-	borderSt := styleFB(th.OverColor("panel.border", bgc), bgc)
-	if a.sashDrag == "panel" || (a.mouseY == r.Y && r.Contains(a.mouseX, a.mouseY) && a.mouseOnPanelSash) {
-		borderSt = styleFB(th.C("sash.hoverBorder"), bgc)
+	// a border row is only needed when the panel blends into the editor
+	border := th.C("panel.background") == th.C("editor.background")
+	sashMark := a.hitMark()
+	hy := r.Y
+	if border {
+		borderSt := styleFB(th.OverColor("panel.border", bgc), bgc)
+		if a.sashDrag == "panel" || (a.mouseY == r.Y && r.Contains(a.mouseX, a.mouseY) && a.mouseOnPanelSash) {
+			borderSt = styleFB(th.C("sash.hoverBorder"), bgc)
+		}
+		for x := r.X; x < r.X+r.W; x++ {
+			a.cv.Set(x, r.Y, '▔', borderSt)
+		}
+		hy = r.Y + 1
+	} else if a.sashDrag == "panel" {
+		for x := r.X; x < r.X+r.W; x++ {
+			a.cv.Set(x, r.Y, ' ', styleFB(th.C("foreground"), bgc).Underline(false))
+		}
 	}
-	for x := r.X; x < r.X+r.W; x++ {
-		a.cv.Set(x, r.Y, '▔', borderSt)
-	}
-	hy := r.Y + 1
 	x := r.X + 1
 	for _, t := range panelTabs {
 		label := t.title
@@ -781,8 +790,8 @@ func (a *App) drawPanel() {
 			return true
 		})
 	}
-	// sash
-	a.addHit(Rect{r.X, r.Y, r.W, 1}, func(ev MouseEvent) bool {
+	// sash: the border row, or the empty part of the header row
+	a.addHitUnder(sashMark, Rect{r.X, r.Y, r.W, 1}, func(ev MouseEvent) bool {
 		switch ev.Kind {
 		case MouseMove:
 			a.mouseOnPanelSash = true
@@ -800,7 +809,7 @@ func (a *App) drawPanel() {
 		}
 		return true
 	})
-	body := Rect{r.X, r.Y + 2, r.W, r.H - 2}
+	body := Rect{r.X, hy + 1, r.W, r.Y + r.H - hy - 1}
 	a.cv.clip = body
 	switch a.panelView {
 	case "terminal":
