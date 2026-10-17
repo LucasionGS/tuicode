@@ -71,7 +71,13 @@ func (w *WelcomePage) links() []welcomeLink {
 			break
 		}
 		folder := f
-		links = append(links, welcomeLink{"recent:" + filepath.Base(f), a.homeRel(filepath.Dir(f)), func() { a.openFolder(folder) }})
+		links = append(links, welcomeLink{"recent:" + filepath.Base(f), a.homeRel(filepath.Dir(f)), func() {
+			if config.IsWorkspaceFile(folder) {
+				a.openWorkspace(folder)
+			} else {
+				a.openFolder(folder)
+			}
+		}})
 	}
 	return links
 }
