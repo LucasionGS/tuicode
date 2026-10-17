@@ -174,7 +174,7 @@ var Defaults = map[string]any{
 	"tuicode.truecolor":                          "auto",
 	"tuicode.icons":                              "auto",
 	// language defaults contributed by VS Code and its common extensions
-	"[go]":         map[string]any{"editor.insertSpaces": false, "editor.tabSize": 4.0},
+	"[go]":         map[string]any{"editor.insertSpaces": false, "editor.tabSize": 4.0, "editor.formatOnSave": true, "editor.codeActionsOnSave": map[string]any{"source.organizeImports": "explicit"}},
 	"[makefile]":   map[string]any{"editor.insertSpaces": false},
 	"[markdown]":   map[string]any{"editor.wordWrap": "on", "editor.quickSuggestions": false},
 	"[git-commit]": map[string]any{"editor.rulers": []any{72.0}},
