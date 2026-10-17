@@ -1,0 +1,113 @@
+name: Release
+
+# Pushing to the release branch publishes a GitHub release of the version in ipm-package.yaml,
+# with pacman packages for x86_64 and aarch64 (what the tuicode-bin AUR package installs)
+# and plain binaries for IPM.
+on:
+  push:
+    branches: [release]
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Read and check the version
+        id: version
+        run: |
+          VERSION="$(grep -m1 '^version:' ipm-package.yaml | cut -d'"' -f2)"
+          # every place set_version.sh updates must agree
+          grep -q "^const Version = \"$VERSION\"" internal/ui/app.go || { echo "internal/ui/app.go does not have version $VERSION. Run ./set_version.sh $VERSION"; exit 1; }
+          grep -q "^pkgver=$VERSION$" packaging/pacman/PKGBUILD || { echo "packaging/pacman/PKGBUILD does not have version $VERSION. Run ./set_version.sh $VERSION"; exit 1; }
+          grep -q "^pkgver=$VERSION$" PKGBUILD || { echo "PKGBUILD does not have version $VERSION. Run ./set_version.sh $VERSION"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Make sure the version is new
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # replacing the files of a published version would break the checksums in the AUR package
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release v$VERSION already exists. Bump the version with ./set_version.sh <version> first."
+            exit 1
+          fi
+
+  binaries:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: ./build-linux.sh
+      - name: Archive
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p release
+          for PLATFORM in linux_x64 linux_arm64; do
+            tar -czf "release/tuicode-$VERSION-$PLATFORM.tar.gz" -C "dist/$PLATFORM" bin
+          done
+      - uses: actions/upload-artifact@v5
+        with:
+          name: binaries
+          path: release/
+          retention-days: 7
+
+  pacman:
+    needs: version
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed git go
+      - uses: actions/checkout@v5
+      - name: Build packages
+        run: |
+          # makepkg refuses to run as root
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          cd packaging/pacman
+          runuser -u builder -- makepkg --noconfirm --nodeps
+          # aarch64 is cross-compiled by Go; makepkg only needs to be told the architecture
+          sed -e 's/^CARCH=.*/CARCH="aarch64"/' -e 's/^CHOST=.*/CHOST="aarch64-unknown-linux-gnu"/' /etc/makepkg.conf > /tmp/makepkg-aarch64.conf
+          runuser -u builder -- makepkg --noconfirm --nodeps --config /tmp/makepkg-aarch64.conf
+          mkdir -p "$GITHUB_WORKSPACE/release"
+          cp ./*.pkg.tar.zst "$GITHUB_WORKSPACE/release/"
+          ls -l "$GITHUB_WORKSPACE/release"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: pacman
+          path: release/
+          retention-days: 7
+
+  release:
+    needs: [version, binaries, pacman]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v6
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cd release
+          sha256sum * > SHA256SUMS
+          gh release create "v$VERSION" * \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "tuicode $VERSION" \
+            --generate-notes

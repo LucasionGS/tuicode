@@ -1,0 +1,44 @@
+# Maintainer: Lucasion <ion@ionnet.dev>
+# Builds the pacman package that the release workflow attaches to GitHub releases.
+# It compiles the checkout this file lives in: makepkg -f (or with --config for another CARCH).
+pkgname=tuicode
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="A Visual Studio Code style code editor for the terminal, with LSP, git, debugging and an integrated terminal"
+arch=('x86_64' 'aarch64')
+url="https://github.com/LucasionGS/tuicode"
+license=('MIT')
+depends=('glibc')
+makedepends=('go')
+optdepends=(
+  'git: source control'
+  'ripgrep: faster find in files'
+  'wl-clipboard: clipboard on Wayland'
+  'xclip: clipboard on X11'
+  'delve: debugging Go'
+  'gdb: debugging C, C++ and Rust'
+  'gopls: Go language server'
+  'typescript-language-server: TypeScript and JavaScript language server'
+)
+# Go strips its own binaries, and the host strip can't handle a cross-compiled aarch64 one
+options=('!debug' '!strip')
+
+_srcroot="$(realpath "$startdir/../..")"
+
+build() {
+  cd "$_srcroot"
+  local goarch
+  case "$CARCH" in
+    x86_64) goarch=amd64 ;;
+    aarch64) goarch=arm64 ;;
+    *) echo "Unsupported architecture: $CARCH" && return 1 ;;
+  esac
+  CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath -ldflags "-s -w" -o "$srcdir/tuicode" ./cmd/tuicode
+}
+
+package() {
+  install -Dm755 "$srcdir/tuicode" "$pkgdir/usr/bin/tuicode"
+  install -Dm644 "$_srcroot/README.md" "$pkgdir/usr/share/doc/tuicode/README.md"
+  install -Dm644 "$_srcroot/LICENSE" "$pkgdir/usr/share/licenses/tuicode/LICENSE"
+  install -Dm644 "$_srcroot/THIRD_PARTY.md" "$pkgdir/usr/share/licenses/tuicode/THIRD_PARTY.md"
+}

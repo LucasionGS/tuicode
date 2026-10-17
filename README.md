@@ -23,11 +23,19 @@ Visual Studio Code, but it lives in your terminal. Same layout, same shortcuts, 
 
 ## Installation
 
+From the AUR (Arch Linux):
+
+```bash
+yay -S tuicode-bin
+```
+
 From IPM:
 
 ```bash
 ipm install tuicode
 ```
+
+Or grab a pacman package (`pacman -U tuicode-*.pkg.tar.zst`) or a plain binary from the [GitHub releases](https://github.com/LucasionGS/tuicode/releases).
 
 From source (Go 1.27+):
 
@@ -125,5 +133,7 @@ internal/git      git commands and line diffs
 internal/config   JSONC, settings layers, keybindings and when clauses
 internal/ui       the workbench
 ```
+
+Releasing: bump the version with `./set_version.sh <version>`, commit, and push to the `release` branch. The Release workflow tests, builds pacman packages for x86_64 and aarch64 plus plain binaries, and publishes them as GitHub release `v<version>`. Then `./update_aur.sh` fills in the checksums of the release and publishes the `tuicode-bin` PKGBUILD to the AUR.
 
 Development: `make test` runs the unit tests and the UI tests (a simulated screen drives the whole workbench, including a random input fuzzer). The built-in themes are copied from VS Code and are MIT licensed by Microsoft.

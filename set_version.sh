@@ -17,4 +17,6 @@ fi
 sed -i "s/^const Version = \".*\"/const Version = \"$VERSION\"/" internal/ui/app.go
 sed -i "s/^version: \".*\"/version: \"$VERSION\"/" ipm-package.yaml
 sed -i "s/\"version\": \"[^\"]*\"}/\"version\": \"$VERSION\"}/" internal/lsp/client.go
+# a new version starts over at the first package release
+sed -i -e "s/^pkgver=.*/pkgver=$VERSION/" -e "s/^pkgrel=.*/pkgrel=1/" PKGBUILD packaging/pacman/PKGBUILD
 echo "Done! Version set to $VERSION"
