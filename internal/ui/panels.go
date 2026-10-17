@@ -211,6 +211,13 @@ func (p *ProblemsPanel) handleKey(key string) bool {
 		p.open(p.selected, true)
 	case "space":
 		p.open(p.selected, false)
+	case "ctrl+.":
+		if p.selected < len(p.rows) && p.rows[p.selected].diag != nil {
+			p.open(p.selected, true)
+			if v := p.app.ActiveView(); v != nil {
+				p.app.showCodeActions(v, "")
+			}
+		}
 	case "escape":
 		p.app.focusEditor()
 	default:
