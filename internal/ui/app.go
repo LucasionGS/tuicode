@@ -87,6 +87,7 @@ type App struct {
 	lspDisabled  bool
 	hiddenGroups []*EditorGroup // the full layout while one group is maximized
 	lastRunTask  *task
+	forceText    map[string]bool // binary files opened anyway
 	gitBranch    string
 	gitAhead     int
 	gitBehind    int

@@ -35,8 +35,16 @@ func (a *App) OpenFile(path string, preview bool) *EditorView {
 			a.notify(NotifyError, fmt.Sprintf("The file %s is too large to open (%d MB).", filepath.Base(path), st.Size()>>20))
 			return nil
 		}
-		if isBinaryFile(path) {
-			a.notify(NotifyWarning, "The file "+filepath.Base(path)+" is not displayed in the text editor because it is either binary or uses an unsupported text encoding.")
+		if isBinaryFile(path) && !a.forceText[path] {
+			p := path
+			a.notify(NotifyWarning, "The file "+filepath.Base(path)+" is not displayed in the text editor because it is either binary or uses an unsupported text encoding.",
+				NotifyAction{Label: "Open Anyway", Run: func() {
+					if a.forceText == nil {
+						a.forceText = map[string]bool{}
+					}
+					a.forceText[p] = true
+					a.OpenFile(p, false)
+				}})
 			return nil
 		}
 		b, err := buffer.Load(path)
