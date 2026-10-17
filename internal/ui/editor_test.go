@@ -181,3 +181,32 @@ func TestTerminal(t *testing.T) {
 	h.dump()
 	t.Fatal("terminal output not shown")
 }
+
+func TestTerminalCtrlC(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "x\n"})
+	t.Setenv("SHELL", "/bin/sh")
+	h := newHarness(t, 120, 40, Options{Paths: []string{dir}})
+	h.ctrl('`')
+	h.typeText("sleep 30; echo not-interrupted")
+	h.key(tcell.KeyEnter, 0, 0)
+	time.Sleep(300 * time.Millisecond)
+	// legacy terminals send ctrl+c as a control byte, kitty as ctrl-modified rune
+	h.a.handleEvent(tcell.NewEventKey(tcell.KeyCtrlC, 0, tcell.ModCtrl))
+	h.typeText("echo after-$((1+1))")
+	h.key(tcell.KeyEnter, 0, 0)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+		if h.contains("after-2") {
+			for _, l := range h.screen() {
+				if strings.HasSuffix(strings.TrimSpace(strings.TrimRight(l, "│ ")), "▕ not-interrupted") || strings.TrimSpace(l) == "not-interrupted" {
+					t.Fatal("ctrl+c did not interrupt")
+				}
+			}
+			return
+		}
+	}
+	h.dump()
+	t.Fatal("ctrl+c did not reach the shell")
+}

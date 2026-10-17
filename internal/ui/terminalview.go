@@ -640,7 +640,7 @@ func (tp *TerminalPanel) sendKey(ev *tcell.EventKey, key string) {
 	default:
 		k := ev.Key()
 		if k >= tcell.KeyCtrlA && k <= tcell.KeyCtrlZ {
-			out = []byte{byte(k)}
+			out = []byte{byte(k-tcell.KeyCtrlA) + 1}
 			if mod&tcell.ModAlt != 0 {
 				out = append([]byte{0x1b}, out...)
 			}
