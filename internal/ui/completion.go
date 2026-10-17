@@ -115,7 +115,7 @@ func (a *App) afterType(v *EditorView, text string) {
 			isTrigger = true
 		}
 	}
-	emmetChar := emmetLangs[v.lang()] && strings.ContainsRune(".#>*+]}^$", ch)
+	emmetChar := emmetLangs[v.lang()] && strings.ContainsRune(".#>*+]}^$", ch) || cssEmmetLangs[v.lang()] && strings.ContainsRune(":#-!", ch)
 	if isTrigger && a.settings.Bool("editor.suggestOnTriggerCharacters", v.lang()) {
 		a.triggerCompletion(v, false, text)
 	} else if emmetChar && a.emmetCompletion(v) != nil {

@@ -278,3 +278,66 @@ func TestMergeConflicts(t *testing.T) {
 		t.Fatalf("lens click: %q", got)
 	}
 }
+
+func TestCSSEmmet(t *testing.T) {
+	cases := map[string]string{
+		"m10":        "margin: 10px$0;",
+		"m10-20":     "margin: 10px 20px$0;",
+		"m-5":        "margin: -5px$0;",
+		"w100p":      "width: 100%$0;",
+		"lh1.5":      "line-height: 1.5$0;",
+		"df":         "display: flex$0;",
+		"jcsb":       "justify-content: space-between$0;",
+		"pos:a":      "position: absolute$0;",
+		"c#f":        "color: #fff$0;",
+		"p0":         "padding: 0$0;",
+		"z10":        "z-index: 10$0;",
+		"fz1.2r":     "font-size: 1.2rem$0;",
+		"bdrs4!":     "border-radius: 4px !important$0;",
+		"m":          "margin: $1;",
+		"gtc1fr-2fr": "grid-template-columns: 1fr 2fr$0;",
+	}
+	for abbr, want := range cases {
+		if got, ok := expandCSSEmmet(abbr); !ok || got != want {
+			t.Errorf("%s: got %q %v, want %q", abbr, got, ok, want)
+		}
+	}
+	for _, bad := range []string{"color", "display", "mx10", "w10q"} {
+		if got, ok := expandCSSEmmet(bad); ok {
+			t.Errorf("%s expanded to %q", bad, got)
+		}
+	}
+	dir := tempWorkspace(t, map[string]string{"a.scss": ".a {\n  \n}\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.scss")}})
+	v := h.a.ActiveView()
+	v.SetCursor(buffer.Pos{Line: 1, Col: 2})
+	h.typeText("jcsb")
+	if v.completion == nil || !v.completion.visible() || !v.completion.filtered[0].emmet {
+		h.dump()
+		t.Fatal("no emmet css suggestion")
+	}
+	h.key(tcell.KeyTab, 0, 0)
+	if got := v.buf().LineString(1); got != "  justify-content: space-between;" {
+		t.Fatalf("expanded: %q", got)
+	}
+}
+
+func TestEmmetWrap(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.html": "hello\nline one\nline two\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.html")}})
+	h.a.focusEditor()
+	v := h.a.ActiveView()
+	h.a.RunCommand("editor.emmet.action.wrapWithAbbreviation", nil)
+	h.a.quick.input.SetText("div.a>p")
+	h.key(tcell.KeyEnter, 0, 0)
+	if got := h.text(); !strings.HasPrefix(got, "<div class=\"a\">\n    <p>hello</p>\n</div>\n") {
+		t.Fatalf("inline wrap: %q", got)
+	}
+	v.SetSelections([]buffer.Selection{{Anchor: buffer.Pos{Line: 3}, Active: buffer.Pos{Line: 4, Col: 8}}}, 0)
+	h.a.RunCommand("editor.emmet.action.wrapWithAbbreviation", nil)
+	h.a.quick.input.SetText("ul")
+	h.key(tcell.KeyEnter, 0, 0)
+	if got := h.text(); !strings.HasSuffix(got, "<ul>\n    line one\n    line two\n</ul>\n") {
+		t.Fatalf("block wrap: %q", got)
+	}
+}

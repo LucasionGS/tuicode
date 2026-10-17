@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	"tuicode/internal/buffer"
 	"tuicode/internal/lsp"
 )
 
@@ -247,6 +248,9 @@ func (v *EditorView) emmetAbbreviationBefore() (string, int) {
 
 // emmetCompletion returns a completion item for the abbreviation before the cursor.
 func (a *App) emmetCompletion(v *EditorView) *citem {
+	if cssEmmetLangs[v.lang()] {
+		return a.cssEmmetCompletion(v)
+	}
 	if !emmetLangs[v.lang()] {
 		return nil
 	}
@@ -280,4 +284,64 @@ func knownTag(s string) bool {
 		}
 	}
 	return false
+}
+
+// cssEmmetCompletion offers an Emmet CSS expansion for the abbreviation at the start of a declaration.
+func (a *App) cssEmmetCompletion(v *EditorView) *citem {
+	if v.inStringOrComment(v.Cursor()) {
+		return nil
+	}
+	abbr, start := v.emmetAbbreviationBefore()
+	line := v.buf().Line(v.Cursor().Line)
+	if abbr == "" || strings.TrimSpace(string(line[:start])) != "" && !strings.HasSuffix(strings.TrimSpace(string(line[:start])), "{") && !strings.HasSuffix(strings.TrimSpace(string(line[:start])), ";") {
+		return nil
+	}
+	body, ok := expandCSSEmmet(abbr)
+	if !ok {
+		return nil
+	}
+	item := &lsp.CompletionItem{Label: abbr, InsertText: body, InsertTextFormat: 2, Detail: "Emmet Abbreviation", Kind: lsp.CIKSnippet}
+	preview := strings.NewReplacer("$0", "", "$1", "").Replace(body)
+	return &citem{item: item, label: abbr, filter: abbr, sortText: "\x00" + abbr, kind: lsp.CIKSnippet, detail: preview, docs: "```css\n" + preview + "\n```", resolved: true, emmet: true}
+}
+
+const emmetWrapMarker = "\x00wrap\x00"
+
+// wrapWithAbbreviation wraps the selection (or the current line) in an Emmet abbreviation.
+func (a *App) wrapWithAbbreviation(v *EditorView) {
+	a.promptInput("Emmet: Wrap with Abbreviation", "Enter Abbreviation", "div", func(abbr string) {
+		nodes, ok := parseEmmet(abbr)
+		if !ok {
+			a.setStatusMessage("Invalid abbreviation: " + abbr)
+			return
+		}
+		// the content goes into the innermost last element
+		n := nodes[len(nodes)-1]
+		for len(n.children) > 0 {
+			n = n.children[len(n.children)-1]
+		}
+		n.text = emmetWrapMarker
+		b := v.buf()
+		r := v.Primary().Range()
+		if r.Empty() {
+			r = buffer.Range{Start: buffer.Pos{Line: r.Start.Line, Col: b.FirstNonWhitespace(r.Start.Line)}, End: buffer.Pos{Line: r.Start.Line, Col: b.LineLen(r.Start.Line)}}
+		}
+		content := b.TextRange(r)
+		body := expandEmmet(nodes, v.lang() == "javascriptreact" || v.lang() == "typescriptreact")
+		escaped := strings.NewReplacer(`\`, `\\`, "$", `\$`, "}", `\}`).Replace(content)
+		if strings.Contains(content, "\n") {
+			// multi-line content sits on its own lines, one level deeper than its tag
+			i := strings.Index(body, emmetWrapMarker)
+			lineStart := strings.LastIndex(body[:i], "\n") + 1
+			indent := body[lineStart : lineStart+len(body[lineStart:])-len(strings.TrimLeft(body[lineStart:], "\t"))]
+			var lines []string
+			for _, l := range strings.Split(escaped, "\n") {
+				lines = append(lines, indent+"\t"+l)
+			}
+			escaped = "\n" + strings.Join(lines, "\n") + "\n" + indent
+		}
+		body = strings.Replace(body, emmetWrapMarker, escaped, 1)
+		v.buf().CloseUndoGroup()
+		v.insertSnippet(r, body)
+	})
 }

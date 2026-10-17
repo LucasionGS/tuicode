@@ -38,6 +38,7 @@ func (a *App) registerMoreCommands() {
 		}})
 	}))
 	a.alias("editor.action.goToLastEditLocation", "workbench.action.navigateToLastEditLocation")
+	a.cmd("editor.emmet.action.wrapWithAbbreviation", "Emmet", "Wrap with Abbreviation", a.edit(func(v *EditorView) { a.wrapWithAbbreviation(v) }))
 	//#endregion
 
 	//#region Editor groups
