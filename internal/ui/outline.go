@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"tuicode/internal/buffer"
 	"tuicode/internal/lsp"
@@ -33,6 +34,8 @@ type OutlineView struct {
 	scroll    int
 	rect      Rect
 	collapsed map[string]bool
+	typeBuf   string
+	typeTime  time.Time
 }
 
 func newOutlineView(a *App) *OutlineView {
@@ -318,7 +321,25 @@ func (o *OutlineView) handleKey(key, text string, isText bool) bool {
 	case "escape":
 		a.focusEditor()
 	default:
-		return false
+		if !isText || text == " " || len(syms) == 0 {
+			return false
+		}
+		// type to navigate, like VS Code's lists
+		if time.Since(o.typeTime) > time.Second {
+			o.typeBuf = ""
+		}
+		o.typeTime = time.Now()
+		o.typeBuf += strings.ToLower(text)
+		for i := 0; i < len(syms); i++ {
+			idx := (o.selected + i) % len(syms)
+			if len(o.typeBuf) == 1 && i == 0 {
+				continue
+			}
+			if strings.HasPrefix(strings.ToLower(syms[idx].Name), o.typeBuf) {
+				o.selected = idx
+				break
+			}
+		}
 	}
 	return true
 }
