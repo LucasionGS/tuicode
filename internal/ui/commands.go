@@ -781,9 +781,16 @@ func (a *App) requestQuit() {
 			dirty = append(dirty, d)
 		}
 	}
-	if len(dirty) == 0 || a.settings.String("files.hotExit", "") == "onExitAndWindowClose" {
+	if len(dirty) == 0 {
 		a.quit = true
 		return
+	}
+	// hot exit: keep unsaved changes in a backup and restore them next time
+	if mode := a.settings.String("files.hotExit", ""); mode == "onExit" || mode == "onExitAndWindowClose" {
+		if err := a.writeBackups(dirty); err == nil {
+			a.quit = true
+			return
+		}
 	}
 	msg := fmt.Sprintf("Do you want to save the changes to %d file(s)?", len(dirty))
 	if len(dirty) == 1 {

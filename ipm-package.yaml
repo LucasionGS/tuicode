@@ -1,0 +1,16 @@
+# Name of this package. Must match ^[a-z0-9\-]+$
+name: "tuicode"
+# Version of this package. Must match ^[0-9]+\.[0-9]+\.[0-9]+$
+version: "0.1.0"
+# Description of this package.
+description: "A Visual Studio Code style code editor for the terminal, with LSP, git and an integrated terminal."
+# Author of this package.
+author: "Lucasion"
+# Directory of the files to include in the package.
+# Can be a string (for any) or a map of platform to string. Platform can be "linux", "windows", or "any".
+dist:
+  linux_x64: "dist/linux_x64/"
+  linux_arm64: "dist/linux_arm64/"
+bin:
+  linux_x64: ["bin/tuicode"]
+  linux_arm64: ["bin/tuicode"]

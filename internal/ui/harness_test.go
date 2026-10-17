@@ -11,9 +11,9 @@ import (
 )
 
 type harness struct {
-	t   *testing.T
-	a   *App
-	s   tcell.SimulationScreen
+	t *testing.T
+	a *App
+	s tcell.SimulationScreen
 }
 
 func newHarness(t *testing.T, w, h int, opts Options) *harness {

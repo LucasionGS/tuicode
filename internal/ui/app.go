@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -195,6 +196,7 @@ type App struct {
 	state               *stateFile
 	fileIdx             *fileIndex
 	keyLabels           map[string]string
+	panics              int
 }
 
 type navEntry struct {
@@ -445,11 +447,11 @@ func (a *App) Run() error {
 				a.quit = true
 				break
 			}
-			a.handleEvent(ev)
+			a.safely(func() { a.handleEvent(ev) })
 		case fn := <-a.postCh:
-			fn()
+			a.safely(fn)
 		case <-ticker.C:
-			a.tick()
+			a.safely(a.tick)
 		}
 		// drain everything that is already queued before drawing
 	drain:
@@ -460,22 +462,43 @@ func (a *App) Run() error {
 					a.quit = true
 					break drain
 				}
-				a.handleEvent(ev)
+				a.safely(func() { a.handleEvent(ev) })
 			case fn := <-a.postCh:
-				fn()
+				a.safely(fn)
 			default:
 				break drain
 			}
 		}
 		if a.lsp != nil {
-			a.lsp.Flush()
+			a.safely(a.lsp.Flush)
 		}
-		a.draw()
+		a.safely(a.draw)
 	}
 	close(quitCh)
 	a.shutdown()
 	s.Fini()
 	return nil
+}
+
+// safely runs fn and turns a panic into an error notification instead of crashing,
+// so a bug in one feature never takes unsaved work down with it.
+func (a *App) safely(fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			stack := string(debug.Stack())
+			a.output.append("tuicode", fmt.Sprintf("panic: %v\n%s", r, stack))
+			a.panics++
+			if a.panics < 20 {
+				a.notify(NotifyError, fmt.Sprintf("Internal error: %v (details in Output > tuicode)", r))
+			}
+			a.dialog = nil
+			a.ctxMenu = nil
+			if a.screen != nil {
+				a.screen.Show()
+			}
+		}
+	}()
+	fn()
 }
 
 func (a *App) shutdown() {
@@ -1282,7 +1305,14 @@ func (a *App) scheduleAutoSave() {
 		a.autoSaveTimer.Stop()
 	}
 	a.autoSaveTimer = time.AfterFunc(delay, func() {
-		a.Post(func() { a.saveAllDirty() })
+		a.Post(func() {
+			// auto save after delay skips formatting and other save participants, like VS Code
+			for _, d := range a.docs {
+				if d.Buf.Dirty() && d.Buf.Path != "" && !d.Virtual {
+					a.writeDocument(d)
+				}
+			}
+		})
 	})
 }
 

@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"tuicode/internal/buffer"
 	"tuicode/internal/config"
+	"tuicode/internal/lsp"
+	"tuicode/internal/syntax"
 )
 
 // OpenFile opens (or focuses) a file in the active group.
@@ -138,18 +141,91 @@ func (a *App) saveDocument(d *Document, _ bool) bool {
 		return false
 	}
 	lang := d.Lang.ID
-	if a.settings.Bool("editor.formatOnSave", lang) && a.lsp != nil && a.lsp.Client(d.Buf) != nil {
-		v := a.viewForDoc(d)
-		if v != nil {
+	v := a.viewForDoc(d)
+	hasLSP := a.lsp != nil && a.lsp.Client(d.Buf) != nil && v != nil
+	format := func() {
+		if a.settings.Bool("editor.formatOnSave", lang) && hasLSP {
 			a.formatDocument(v, nil, func() {
 				a.runSaveParticipants(d)
 				a.writeDocument(d)
 			})
-			return true
+			return
+		}
+		a.runSaveParticipants(d)
+		a.writeDocument(d)
+	}
+	if kinds := a.codeActionsOnSave(lang); len(kinds) > 0 && hasLSP {
+		a.runCodeActionsOnSave(v, kinds, format)
+		return true
+	}
+	format()
+	return true
+}
+
+// codeActionsOnSave returns the code action kinds enabled for saving.
+func (a *App) codeActionsOnSave(lang string) []string {
+	var kinds []string
+	m, _ := a.settings.Get("editor.codeActionsOnSave", lang).(map[string]any)
+	for k, v := range m {
+		switch x := v.(type) {
+		case bool:
+			if x {
+				kinds = append(kinds, k)
+			}
+		case string:
+			if x == "explicit" || x == "always" {
+				kinds = append(kinds, k)
+			}
 		}
 	}
-	a.runSaveParticipants(d)
-	return a.writeDocument(d)
+	sort.Strings(kinds)
+	return kinds
+}
+
+// runCodeActionsOnSave applies code actions of the given kinds one after another.
+func (a *App) runCodeActionsOnSave(v *EditorView, kinds []string, done func()) {
+	if len(kinds) == 0 {
+		done()
+		return
+	}
+	kind := kinds[0]
+	rest := kinds[1:]
+	b := v.buf()
+	params := map[string]any{
+		"textDocument": map[string]any{"uri": lsp.PathToURI(b.Path)},
+		"range":        lsp.Range{Start: lsp.Position{}, End: a.lsp.ToLSP(b, b.EndPos())},
+		"context":      map[string]any{"diagnostics": []lsp.Diagnostic{}, "only": []string{kind}, "triggerKind": 2},
+	}
+	version := b.Version()
+	finished := false
+	timer := afterFunc(1500, func() {
+		a.Post(func() {
+			if !finished {
+				finished = true
+				a.runCodeActionsOnSave(v, rest, done)
+			}
+		})
+	})
+	_, ok := a.lsp.Request(b, "textDocument/codeAction", params, func(raw json.RawMessage, err error) {
+		if finished {
+			return
+		}
+		finished = true
+		timer.Stop()
+		if err == nil && b.Version() == version {
+			for _, ca := range parseCodeActions(raw) {
+				if ca.Edit != nil {
+					a.applyWorkspaceEdit(*ca.Edit)
+				}
+			}
+		}
+		a.runCodeActionsOnSave(v, rest, done)
+	})
+	if !ok {
+		finished = true
+		timer.Stop()
+		a.runCodeActionsOnSave(v, rest, done)
+	}
 }
 
 func (a *App) saveDocumentNoFormat(d *Document) bool {
@@ -862,6 +938,7 @@ func (a *App) saveSession() {
 }
 
 func (a *App) restoreSession() {
+	defer a.restoreBackups()
 	if a.root == "" {
 		return
 	}
@@ -927,6 +1004,94 @@ func (a *App) restoreSession() {
 				}
 			})
 		}
+	}
+}
+
+//#endregion
+
+//#region Hot exit
+
+type backupEntry struct {
+	Path     string `json:"path,omitempty"`
+	Untitled string `json:"untitled,omitempty"`
+	Text     string `json:"text"`
+	Line     int    `json:"line"`
+	Col      int    `json:"col"`
+	Lang     string `json:"lang"`
+}
+
+func (a *App) backupPath() string {
+	key := a.root
+	if key == "" {
+		key = "empty"
+	}
+	sum := 0
+	for _, c := range key {
+		sum = sum*31 + int(c)
+	}
+	return filepath.Join(config.Dir(), "backups", fmt.Sprintf("%x.json", uint32(sum)))
+}
+
+// writeBackups stores unsaved documents for hot exit.
+func (a *App) writeBackups(dirty []*Document) error {
+	var entries []backupEntry
+	for _, d := range dirty {
+		e := backupEntry{Path: d.Buf.Path, Text: d.Buf.Text(), Lang: d.Lang.ID}
+		if d.Buf.Path == "" {
+			e.Untitled = d.Buf.Name()
+		}
+		if v := a.viewForDoc(d); v != nil {
+			c := v.Cursor()
+			e.Line, e.Col = c.Line, c.Col
+		}
+		entries = append(entries, e)
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return err
+	}
+	p := a.backupPath()
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(p, data, 0o600)
+}
+
+// restoreBackups reopens unsaved documents from the last session.
+func (a *App) restoreBackups() {
+	p := a.backupPath()
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	_ = os.Remove(p)
+	var entries []backupEntry
+	if json.Unmarshal(data, &entries) != nil {
+		return
+	}
+	for _, e := range entries {
+		var v *EditorView
+		if e.Path != "" {
+			v = a.OpenFile(e.Path, false)
+		} else {
+			v = a.NewUntitled()
+			if e.Lang != "" {
+				a.SetLanguage(v.doc, syntax.ByID(e.Lang))
+			}
+		}
+		if v == nil {
+			continue
+		}
+		b := v.buf()
+		if b.Text() != e.Text {
+			b.ApplyEdits([]buffer.Edit{{Range: buffer.Range{Start: buffer.Pos{}, End: b.EndPos()}, Text: e.Text}}, nil, "restore")
+			b.CloseUndoGroup()
+		}
+		v.SetCursor(b.Clamp(buffer.Pos{Line: e.Line, Col: e.Col}))
+		v.ensurePosVisible(v.Cursor(), true)
+	}
+	if len(entries) > 0 {
+		a.setStatusMessage(fmt.Sprintf("Restored %d unsaved editor(s) from the last session", len(entries)))
 	}
 }
 
