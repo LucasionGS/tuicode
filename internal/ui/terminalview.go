@@ -1249,3 +1249,8 @@ func (tp *TerminalPanel) openLinkAt(ti *TermInstance, r Rect, x, y int) bool {
 	a.focusEditor()
 	return true
 }
+
+// startTerm starts a program in a pseudo terminal.
+func startTerm(prog string, args []string, dir string, env []string, cols, rows int) (*term.Terminal, error) {
+	return term.Start(prog, args, dir, env, cols, rows)
+}

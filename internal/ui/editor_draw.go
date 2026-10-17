@@ -185,6 +185,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	// active indent guide
 	guideX, guideFrom, guideTo := v.activeIndentGuide()
 	bracketColors := a.settings.Bool("editor.bracketPairColorization.enabled", "")
+	frameLine := a.currentFrameLine(v)
 	a.maybeRequestInlayHints(v)
 	a.maybeRequestLightbulb(v)
 	if v.doc.semVersion != v.buf().Version() && v.doc.semTimer == nil {
@@ -233,6 +234,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		if isCurLine && (lineHL == "line" || lineHL == "all") && !v.HasSelection() && focused {
 			rowBg = hlBg
 		}
+		if frameLine == line {
+			rowBg = th.OverColor("editor.stackFrameHighlightBackground", bgc)
+		}
 		// gutter
 		gst := styleFB(th.C("editorLineNumber.foreground"), th.C("editorGutter.background"))
 		if isCurLine {
@@ -280,6 +284,30 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		}
 		gitX := gx
 		gx++
+		// breakpoints and the current stack frame live left of the line numbers
+		if row.seg == 0 && v.buf().Path != "" {
+			glyphBg := th.C("editorGutter.background")
+			if bp := a.breakpointAt(v.buf().Path, line); bp != nil {
+				col := th.C("debugIcon.breakpointForeground")
+				glyph := '●'
+				if bp.Disabled || a.debug != nil && a.debug.state != "terminated" && !bp.Verified {
+					col = th.C("debugIcon.breakpointUnverifiedForeground")
+					glyph = '○'
+				}
+				if bp.Condition != "" {
+					glyph = '◐'
+				}
+				if bp.LogMsg != "" {
+					glyph = '◆'
+				}
+				a.cv.Set(r.X, y, glyph, styleFB(col, glyphBg))
+			} else if a.mouseX == r.X && a.mouseY == y {
+				a.cv.Set(r.X, y, '●', styleFB(th.OverColor("debugIcon.breakpointForeground", glyphBg), glyphBg).Dim(true))
+			}
+			if f := a.currentFrameLine(v); f == line {
+				a.cv.Set(r.X, y, '➜', styleFB(th.C("debugIcon.breakpointCurrentStackframeForeground"), glyphBg))
+			}
+		}
 		// fold chevron
 		if row.seg == 0 && a.settings.Bool("editor.folding", "") {
 			if _, folded := v.foldAt(line); folded {
@@ -293,6 +321,10 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		foldX := gx
 		lineNo := line
 		a.addHit(Rect{r.X, y, v.gutterW, 1}, func(ev MouseEvent) bool {
+			if ev.Kind == MousePress && ev.X == v.full.X && ev.Button == tcell.Button1 && v.buf().Path != "" {
+				a.toggleBreakpoint(v.buf().Path, lineNo)
+				return true
+			}
 			if ev.Kind == MousePress && ev.X == gitX && ev.Button == tcell.Button1 {
 				if _, changed := v.doc.gitChanges[lineNo]; changed {
 					v.openDirtyDiff(lineNo)
@@ -1230,4 +1262,16 @@ func mergeInlays(a, b []inlay) []inlay {
 	out = append(out, b...)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].col < out[j].col })
 	return out
+}
+
+// currentFrameLine returns the line of the selected stack frame in this editor, or -1.
+func (a *App) currentFrameLine(v *EditorView) int {
+	if a.debug == nil {
+		return -1
+	}
+	f := a.debug.currentFrame()
+	if f == nil || f.Source == nil || f.Source.Path != v.buf().Path {
+		return -1
+	}
+	return f.Line - 1
 }

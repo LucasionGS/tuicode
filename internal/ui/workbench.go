@@ -196,6 +196,9 @@ func (a *App) drawTitleBar() {
 	if cx+ccW > r.X+r.W-rightW {
 		ccW = r.X + r.W - rightW - cx
 	}
+	if a.drawDebugToolbar(Rect{cx, r.Y, ccW, 1}) {
+		ccW = 0
+	}
 	if ccW >= 10 {
 		ccBg := th.Over("commandCenter.background", "titleBar.activeBackground")
 		if !th.Has("commandCenter.background") {
@@ -262,6 +265,7 @@ var activityItems = []activityItem{
 	{"explorer", IcoExplorer, "Explorer (Ctrl+Shift+E)", "workbench.view.explorer"},
 	{"search", IcoSearch, "Search (Ctrl+Shift+F)", "workbench.view.search"},
 	{"scm", IcoSCM, "Source Control (Ctrl+Shift+G)", "workbench.view.scm"},
+	{"debug", IcoDebug, "Run and Debug (Ctrl+Shift+D)", "workbench.view.debug"},
 	{"outline", IcoOutline, "Outline", "outline.focus"},
 	{"extensions", IcoExtensions, "Language Servers (Ctrl+Shift+X)", "workbench.view.extensions"},
 }
@@ -382,6 +386,10 @@ func (a *App) drawStatusBar() {
 	if a.root == "" {
 		bgKey = "statusBar.noFolderBackground"
 	}
+	debugging := a.debug != nil && a.debug.state != "terminated"
+	if debugging {
+		bgKey = "statusBar.debuggingBackground"
+	}
 	bgc := th.C(bgKey)
 	fgc := th.C("statusBar.foreground")
 	base := styleFB(fgc, bgc)
@@ -410,6 +418,9 @@ func (a *App) drawStatusBar() {
 			sync += fmt.Sprintf(" %d↓ %d↑", a.gitBehind, a.gitAhead)
 		}
 		left = append(left, statusItem{text: sync, cmd: "git.sync", tooltip: "Synchronize Changes"})
+	}
+	if debugging {
+		left = append(left, statusItem{text: a.Icon(IcoDebug) + " " + a.debug.name + " (" + a.debug.state + ")", cmd: "workbench.view.debug", tooltip: "Debug: " + a.debug.name})
 	}
 	errs, warns, infos := a.problemCounts()
 	prob := fmt.Sprintf("%s %d  %s %d", a.Icon(IcoError), errs, a.Icon(IcoWarning), warns)
@@ -587,6 +598,8 @@ func (a *App) drawSidebar() {
 		title = "OUTLINE"
 	case "extensions":
 		title = "LANGUAGE SERVERS"
+	case "debug":
+		title = "RUN AND DEBUG"
 	}
 	tst := styleFB(th.C("sideBarTitle.foreground"), bgc)
 	a.cv.Text(r.X+2, r.Y, r.X+r.W-1, title, tst)
@@ -605,6 +618,8 @@ func (a *App) drawSidebar() {
 		a.outline.draw(body)
 	case "extensions":
 		a.extView.draw(body)
+	case "debug":
+		a.debugView.draw(body)
 	}
 	a.cv.clip = r
 	// sash on the right edge
@@ -649,6 +664,8 @@ func (a *App) sidebarHandleKey(key, text string, isText bool) bool {
 		return a.outline.handleKey(key, text, isText)
 	case "extensions":
 		return a.extView.handleKey(key, text, isText)
+	case "debug":
+		return a.debugView.handleKey(key, text, isText)
 	}
 	return false
 }
@@ -794,7 +811,7 @@ func (a *App) drawPanel() {
 	case "output":
 		a.output.draw(body)
 	case "debug":
-		a.cv.Text(body.X+2, body.Y+1, body.X+body.W, "Debugging is not available. Use the terminal to run your program.", styleFB(th.C("descriptionForeground"), bgc))
+		a.drawDebugConsole(body)
 	case "ports":
 		a.cv.Text(body.X+2, body.Y+1, body.X+body.W, "No forwarded ports.", styleFB(th.C("descriptionForeground"), bgc))
 	}
@@ -844,6 +861,8 @@ func (a *App) showPanel(view string) {
 
 func (a *App) panelHandleKey(key, text string, isText bool) bool {
 	switch a.panelView {
+	case "debug":
+		return a.consoleHandleKey(key)
 	case "problems":
 		return a.problems.handleKey(key)
 	case "output":

@@ -11,6 +11,8 @@ Visual Studio Code, but it lives in your terminal. Same layout, same shortcuts, 
 - **Feels like VS Code**: The default Linux keyboard shortcuts, chords included (`Ctrl+K Ctrl+S`), `when` clauses and VS Code command ids. Your VS Code `settings.json`, `keybindings.json` and user snippets are imported automatically.
 - **IntelliSense**: Completions, hover, signature help, go to definition/references/implementation, rename, code actions with a lightbulb, formatting, organize imports on save, document symbols, workspace symbols, semantic highlighting and inlay hints, all through the language servers you already have (gopls, rust-analyzer, clangd, typescript-language-server, deno, pyright, and more).
 - **Proper editing**: Multi-cursor (`Ctrl+D`, `Alt+Click`, `Ctrl+Shift+L`, column selection), smart auto-closing and indentation, line moves and copies, comment toggling, smart select, snippets with tab stops, folding, word wrap, sticky scroll, minimap, bracket matching and pair colorization, find and replace with regex and preserve case.
+- **Run and Debug**: Breakpoints (conditional and logpoints), stepping, variables, watch expressions, call stack, a debug console with a REPL and value hovers, using the Debug Adapter Protocol with Delve (Go), debugpy (Python), gdb and lldb-dap (C, C++, Rust). Reads your `.vscode/launch.json` and runs `preLaunchTask`.
+- **Tasks**: `.vscode/tasks.json`, npm/deno scripts, Makefile targets and Go/Cargo tasks are detected automatically (`Ctrl+Shift+B` builds).
 - **Integrated terminal**: A real VT100/xterm emulator with 24-bit color, mouse support for TUI apps, scrollback, split terminals, find, and Ctrl+click on file paths and URLs.
 - **Source control**: Git status in the explorer, gutter change bars with a revert peek, a Source Control view to stage, discard and commit, side-by-side diffs, branch checkout, push, pull and sync.
 - **Search everywhere**: Quick Open (`Ctrl+P`) with fuzzy matching, the command palette, find in files (ripgrep when available) with replace, go to line and go to symbol.
@@ -69,6 +71,7 @@ Options: `-n` starts with an untitled file, `-r` opens files read-only, `--no-ls
 | `Ctrl+/` | Toggle line comment |
 | `F12` / `Shift+F12` / `F2` | Definition / references / rename |
 | `Ctrl+.` | Quick fix |
+| `F5` / `F9` / `F10` / `F11` | Debug / breakpoint / step over / step into |
 | `Ctrl+K Ctrl+S` | Keyboard shortcuts editor |
 
 ## Configuration
@@ -104,6 +107,7 @@ internal/buffer   text buffer, edits, undo/redo
 internal/syntax   language table and highlighter
 internal/theme    VS Code theme loader (built-in themes are embedded)
 internal/lsp      language server client and document sync
+internal/dap      debug adapter client
 internal/term     terminal emulator and pty
 internal/git      git commands and line diffs
 internal/config   JSONC, settings layers, keybindings and when clauses

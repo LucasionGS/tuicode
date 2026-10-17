@@ -372,6 +372,31 @@ func (a *App) showHover(v *EditorView, p buffer.Pos, mouse bool) {
 		md := strings.Join(all, "\n\n---\n\n")
 		v.hover = &Hover{v: v, anchor: p, mouse: mouse, md: md}
 	}
+	if a.debug != nil && a.debug.state == "stopped" {
+		expr := ""
+		if wr, ok := v.WordAt(p); ok {
+			expr = v.buf().TextRange(wr)
+			// include a leading selector chain like a.b.c
+			l := v.buf().Line(p.Line)
+			s := wr.Start.Col
+			for s > 1 && l[s-1] == '.' && isWordRune(l[s-2]) {
+				s -= 2
+				for s > 0 && isWordRune(l[s-1]) {
+					s--
+				}
+			}
+			expr = string(l[s:wr.End.Col])
+		}
+		if expr != "" {
+			a.debug.evaluate(expr, "hover", func(res string, err error) {
+				if err != nil {
+					return
+				}
+				v.hover = &Hover{v: v, anchor: p, mouse: mouse, md: "`" + expr + "` = " + "```\n" + res + "\n```"}
+			})
+			return
+		}
+	}
 	if a.lsp == nil || a.lsp.Client(v.buf()) == nil || !a.lsp.Client(v.buf()).Supports("hoverProvider") {
 		show("")
 		return

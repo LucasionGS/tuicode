@@ -750,6 +750,8 @@ func (a *App) registerCommands() {
 	a.cmd("workbench.action.editor.previousChange", "", "Go to Previous Change", a.ed(func(v *EditorView) { a.gotoChange(v, -1) }))
 	//#endregion
 
+	a.registerDebugCommands()
+
 	// markdown preview renders the document as formatted text
 	a.cmd("markdown.showPreview", "Markdown", "Open Preview", a.ed(func(v *EditorView) { a.openMarkdownPreview(v, false) }))
 	a.cmd("markdown.showPreviewToSide", "Markdown", "Open Preview to the Side", a.ed(func(v *EditorView) { a.openMarkdownPreview(v, true) }))

@@ -234,7 +234,7 @@ var defaultKeymap = [][3]string{
 	{"ctrl+k e", "workbench.files.action.focusOpenEditorsView", ""},
 
 	// Display
-	{"f11", "workbench.action.toggleFullScreen", ""},
+	{"f11", "workbench.action.toggleFullScreen", "!inDebugMode"},
 	{"ctrl+k z", "workbench.action.toggleZenMode", ""},
 	{"escape escape", "workbench.action.exitZenMode", "inZenMode"},
 	{"ctrl+b", "workbench.action.toggleSidebarVisibility", ""},
@@ -280,7 +280,15 @@ var defaultKeymap = [][3]string{
 	// Tasks
 	{"ctrl+shift+b", "workbench.action.tasks.build", ""},
 	{"f5", "workbench.action.debug.start", ""},
+	{"f5", "workbench.action.debug.continue", "inDebugMode && debugState == 'stopped'"},
 	{"ctrl+f5", "workbench.action.debug.run", ""},
+	{"shift+f5", "workbench.action.debug.stop", "inDebugMode"},
+	{"ctrl+shift+f5", "workbench.action.debug.restart", "inDebugMode"},
+	{"f6", "workbench.action.debug.pause", "inDebugMode && debugState == 'running'"},
+	{"f9", "editor.debug.action.toggleBreakpoint", "editorTextFocus"},
+	{"f10", "workbench.action.debug.stepOver", "inDebugMode"},
+	{"f11", "workbench.action.debug.stepInto", "inDebugMode"},
+	{"shift+f11", "workbench.action.debug.stepOut", "inDebugMode"},
 }
 
 func (a *App) defaultBindings() []config.Binding {

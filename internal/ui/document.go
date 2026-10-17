@@ -164,6 +164,7 @@ func (a *App) onDocChange(d *Document, ch buffer.Change) {
 		d.Diags[i].Range.Start = buffer.TransformPos(d.Diags[i].Range.Start, ch.Old, ch.NewEnd, false)
 		d.Diags[i].Range.End = buffer.TransformPos(d.Diags[i].Range.End, ch.Old, ch.NewEnd, true)
 	}
+	a.shiftBreakpoints(d, ch)
 	a.requestHighlight(d)
 	a.scheduleGitDiff(d)
 	a.scheduleSemanticTokens(d)

@@ -199,6 +199,16 @@ type App struct {
 	keyLabels           map[string]string
 	panics              int
 	snippets            *snippetCache
+
+	breakpoints   map[string][]*Breakpoint
+	debug         *DebugSession
+	debugView     *DebugView
+	debugConsole  []consoleLine
+	consoleScroll int
+	consoleInput  TextInput
+	lastLaunch    string
+	watches       []string
+	watchValues   map[string]string
 }
 
 type navEntry struct {
@@ -230,6 +240,8 @@ func New(opts Options) (*App, error) {
 		autoClosed:      map[*EditorView][]buffer.Pos{},
 		gitByPath:       map[string]git.FileStatus{},
 		started:         time.Now(),
+		breakpoints:     map[string][]*Breakpoint{},
+		watchValues:     map[string]string{},
 	}
 	// workspace root
 	var files []string
@@ -267,6 +279,7 @@ func New(opts Options) (*App, error) {
 	a.problems = newProblemsPanel(a)
 	a.output = newOutputPanel(a)
 	a.menu = newMenuBar(a)
+	a.debugView = newDebugView(a)
 
 	if !opts.NoLSP && a.settings.Bool("tuicode.lsp.enabled", "") {
 		a.setupLSP()
@@ -715,6 +728,15 @@ func (a *App) contextKey(key string) any {
 		return false
 	case "hasWordHighlights":
 		return v != nil && len(v.highlights) > 0
+	case "inDebugMode":
+		return a.debug != nil && a.debug.state != "terminated"
+	case "debugState":
+		if a.debug == nil {
+			return "inactive"
+		}
+		return a.debug.state
+	case "inDebugRepl":
+		return a.focus == FocusPanel && a.panelView == "debug"
 	case "codeActionMenuVisible":
 		return v != nil && v.codeActions != nil
 	case "scmRepository", "scmProvider":
@@ -753,6 +775,8 @@ var commandsToSkipShell = map[string]bool{
 	"workbench.action.nextEditor": true, "workbench.action.previousEditor": true, "workbench.action.togglePanelPosition": true,
 	"workbench.action.terminal.focus": true, "workbench.action.toggleZenMode": true, "workbench.action.selectTheme": true,
 	"workbench.action.files.saveAll": true, "workbench.action.openRecent": true, "workbench.action.terminal.toggleMaximizedPanel": true,
+	"workbench.action.debug.start": true, "workbench.action.debug.stop": true, "workbench.action.debug.continue": true,
+	"workbench.action.debug.stepOver": true, "workbench.action.debug.stepInto": true, "workbench.action.debug.stepOut": true,
 	"workbench.action.terminal.resizePaneUp": true, "workbench.action.terminal.resizePaneDown": true, "workbench.action.closePanel": true,
 }
 
@@ -953,6 +977,12 @@ func (a *App) focusedInput() *TextInput {
 	case FocusPanel:
 		if a.panelVisible && a.panelView == "terminal" && a.terminals.findOpen {
 			return &a.terminals.findInput
+		}
+		if a.panelVisible && a.panelView == "debug" {
+			if a.consoleInput.app == nil {
+				a.consoleInput = newTextInput(a, "Evaluate expression (when stopped)")
+			}
+			return &a.consoleInput
 		}
 	}
 	return nil
