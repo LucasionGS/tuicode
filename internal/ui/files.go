@@ -52,7 +52,8 @@ func (a *App) OpenFile(path string, preview bool) *EditorView {
 			a.notify(NotifyError, "Unable to open '"+filepath.Base(path)+"': "+err.Error())
 			return nil
 		}
-		if a.opts.ReadOnly {
+		// binary content would not survive a round trip through the text buffer
+		if a.opts.ReadOnly || a.forceText[path] {
 			b.ReadOnly = true
 		}
 		d = a.newDocument(b)
