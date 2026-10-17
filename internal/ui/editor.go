@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"sort"
 
 	"github.com/gdamore/tcell/v2"
@@ -816,11 +817,38 @@ func (v *EditorView) ensurePosVisible(p buffer.Pos, center bool) {
 
 //#region Folding
 
-// foldRangeAt computes the indentation-based fold range starting at line.
+var regionStartRe = regexp.MustCompile(`^\s*(?://|#|--|/\*|<!--|;|%)\s*#?region\b`)
+var regionEndRe = regexp.MustCompile(`^\s*(?://|#|--|/\*|<!--|;|%)\s*#?endregion\b`)
+
+// regionRangeAt returns the range of a "#region" marker block starting at line.
+func (v *EditorView) regionRangeAt(line int) (Fold, bool) {
+	b := v.buf()
+	if !regionStartRe.MatchString(b.LineString(line)) {
+		return Fold{}, false
+	}
+	depth := 0
+	for l := line + 1; l < b.LineCount() && l < line+20000; l++ {
+		s := b.LineString(l)
+		if regionStartRe.MatchString(s) {
+			depth++
+		} else if regionEndRe.MatchString(s) {
+			if depth == 0 {
+				return Fold{line, l}, true
+			}
+			depth--
+		}
+	}
+	return Fold{}, false
+}
+
+// foldRangeAt computes the fold range starting at line from region markers or indentation.
 func (v *EditorView) foldRangeAt(line int) (Fold, bool) {
 	b := v.buf()
 	if line >= b.LineCount()-1 {
 		return Fold{}, false
+	}
+	if f, ok := v.regionRangeAt(line); ok {
+		return f, true
 	}
 	ind := v.indentLevel(line)
 	if ind < 0 {

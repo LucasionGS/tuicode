@@ -550,7 +550,7 @@ func (a *App) tick() {
 	if a.tickCount%10 == 0 && a.settings.Bool("git.autorefresh", "") {
 		a.refreshGit()
 	}
-	if a.tickCount%20 == 0 {
+	if a.tickCount%4 == 0 {
 		a.explorer.refreshIfChanged()
 	}
 }

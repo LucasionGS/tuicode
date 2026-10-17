@@ -248,3 +248,23 @@ func TestAutoClose(t *testing.T) {
 		t.Fatalf("surround: %q", got)
 	}
 }
+
+func TestRegionFolding(t *testing.T) {
+	src := "package x\n\n//#region Helpers\nfunc a() {}\n\nfunc b() {}\n//#endregion\n\nfunc c() {}\n"
+	dir := tempWorkspace(t, map[string]string{"x.go": src})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "x.go")}})
+	v := h.a.ActiveView()
+	f, ok := v.foldRangeAt(2)
+	if !ok || f.End != 6 {
+		t.Fatalf("region fold: %+v %v", f, ok)
+	}
+	v.SetCursor(buffer0(2))
+	h.key(tcell.KeyRune, '[', tcell.ModCtrl|tcell.ModShift)
+	if !v.isHidden(4) || v.isHidden(7) {
+		t.Fatalf("folded lines wrong: %+v", v.folds)
+	}
+	if !h.contains("Helpers") || h.contains("func a()") {
+		h.dump()
+		t.Fatal("fold not rendered")
+	}
+}
