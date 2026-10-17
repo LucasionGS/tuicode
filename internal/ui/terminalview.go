@@ -1077,7 +1077,12 @@ func (tp *TerminalPanel) mouse(ti *TermInstance, r Rect, ev MouseEvent) {
 			tp.contextMenu(ev.X, ev.Y)
 			return
 		case tcell.Button3:
-			tp.paste(a.getClipboard())
+			// Linux terminals paste the primary selection on middle click
+			if a.settings.Bool("editor.selectionClipboard", "") {
+				tp.paste(a.getPrimarySelection())
+			} else {
+				tp.paste(a.getClipboard())
+			}
 			return
 		}
 		if ev.Clicks == 2 {
@@ -1133,10 +1138,15 @@ func (tp *TerminalPanel) mouse(ti *TermInstance, r Rect, ev MouseEvent) {
 }
 
 func (tp *TerminalPanel) afterSelect(ti *TermInstance) {
+	text := tp.selectionText(ti)
+	if text == "" {
+		return
+	}
 	if tp.app.settings.Bool("terminal.integrated.copyOnSelection", "") {
-		if text := tp.selectionText(ti); text != "" {
-			tp.app.setClipboard(text)
-		}
+		tp.app.setClipboard(text)
+	}
+	if tp.app.settings.Bool("editor.selectionClipboard", "") {
+		tp.app.setPrimarySelection(text)
 	}
 }
 
