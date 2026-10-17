@@ -45,6 +45,9 @@ func (v *EditorView) testLensesEnabled() bool {
 	switch v.lang() {
 	case "typescript", "typescriptreact", "javascript", "javascriptreact":
 		return v.app.settings.Bool("deno.codeLens.test", "")
+	case "rust":
+		// rust-analyzer's "▶ Run Test" lens
+		return v.app.settings.Bool("rust-analyzer.lens.enable", "")
 	case "go":
 	default:
 		return false
@@ -66,7 +69,7 @@ func (v *EditorView) testLenses(line int) []*codeLens {
 		return nil
 	}
 	a := v.app
-	if v.doc.testKind == "deno" || v.doc.testKind == "vitest" {
+	if v.doc.testKind == "deno" || v.doc.testKind == "vitest" || v.doc.testKind == "rust" {
 		// the Deno extension's lens
 		return []*codeLens{{line: line, command: &lsp.Command{Title: "▶ Run Test"}, run: func() { a.runTests([]*testCase{a.testAt(v.doc, line)}) }}}
 	}
@@ -94,7 +97,10 @@ func (v *EditorView) setLenses(m map[int][]*codeLens) {
 // lensTitles returns the visible lens titles on a line.
 func (v *EditorView) lensTitles(line int) []*codeLens {
 	out := v.conflictLenses(line)
-	out = append(out, v.testLenses(line)...)
+	if len(v.lenses[line]) == 0 {
+		// language servers that offer their own test lenses win
+		out = append(out, v.testLenses(line)...)
+	}
 	for _, l := range v.lenses[line] {
 		if l.command != nil && l.command.Title != "" {
 			out = append(out, l)
@@ -196,6 +202,16 @@ func (a *App) runCodeLens(v *EditorView, l *codeLens) {
 		return
 	}
 	switch cmd.Command {
+	case "deno.client.test", "rust-analyzer.runSingle", "rust-analyzer.debugSingle":
+		// the extensions run these client side; tuicode runs the test itself
+		if t := a.testAt(v.doc, l.line); t != nil {
+			if cmd.Command == "rust-analyzer.debugSingle" {
+				a.setStatusMessage("Debugging Rust tests needs a launch configuration (lldb).")
+				return
+			}
+			a.runTests([]*testCase{t})
+			return
+		}
 	case "editor.action.showReferences", "editor.action.peekLocations", "editor.action.goToLocations":
 		// arguments: uri, position, locations
 		if len(cmd.Arguments) >= 3 {

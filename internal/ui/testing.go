@@ -114,6 +114,12 @@ func testKind(path string, text func() string) string {
 	if strings.HasSuffix(path, "_test.go") {
 		return "go"
 	}
+	if strings.HasSuffix(path, ".rs") {
+		if strings.Contains(text(), "#[") {
+			return "rust"
+		}
+		return ""
+	}
 	switch filepath.Ext(path) {
 	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs":
 		if strings.Contains(text(), "Deno.test") {
@@ -137,6 +143,8 @@ func testsInSource(kind string, lines []string) map[int]string {
 		return denoTestsIn(lines)
 	case "vitest":
 		return vitestTestsIn(lines)
+	case "rust":
+		return rustTestsIn(lines)
 	}
 	return nil
 }
@@ -149,7 +157,7 @@ func (d *Document) testsInDoc() map[int]string {
 	d.testsVersion = d.Buf.Version() + 1
 	d.tests, d.testKind = nil, ""
 	switch filepath.Ext(d.Buf.Path) {
-	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs":
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".rs":
 		lines := d.Buf.Lines()
 		d.testKind = testKind(d.Buf.Path, func() string { return strings.Join(lines, "\n") })
 		d.tests = testsInSource(d.testKind, lines)
@@ -159,8 +167,11 @@ func (d *Document) testsInDoc() map[int]string {
 
 // testGroup returns where a test runs: its package for Go, its file for Deno.
 func testGroup(kind, file string) string {
-	if kind == "go" {
+	switch kind {
+	case "go":
 		return filepath.Dir(file)
+	case "rust":
+		return crateRoot(file)
 	}
 	return file
 }
@@ -196,7 +207,7 @@ func (tv *TestingView) scan() {
 	var testFiles []string
 	for _, f := range files {
 		base := filepath.Base(f)
-		if strings.HasSuffix(f, "_test.go") || strings.Contains(base, "_test.") || strings.Contains(base, ".test.") {
+		if strings.HasSuffix(f, "_test.go") || strings.Contains(base, "_test.") || strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") || strings.HasSuffix(f, ".rs") {
 			testFiles = append(testFiles, f)
 		}
 	}
@@ -378,6 +389,9 @@ func (a *App) runTests(cases []*testCase) {
 			return
 		case "vitest":
 			a.runVitest(dir, filter, byDir[dir], func() { runNext(i + 1) })
+			return
+		case "rust":
+			a.runCargoTests(dir, byDir[dir], func() { runNext(i + 1) })
 			return
 		}
 		args := []string{"test", "-json", "-run", filter, "."}
@@ -1179,6 +1193,167 @@ func (a *App) stackResult(file, name string, status testStatus, message string) 
 			Message:  name + ": " + first,
 		}))
 	}
+}
+
+//#endregion
+
+//#region Rust
+
+var rustFnRe = regexp.MustCompile(`^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)`)
+
+// rustTestsIn finds functions marked #[test] (or #[tokio::test] and friends).
+func rustTestsIn(lines []string) map[int]string {
+	out := map[int]string{}
+	pending := false
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		switch {
+		case t == "#[test]" || strings.HasSuffix(t, "::test]") || strings.HasPrefix(t, "#[test_case") || strings.HasPrefix(t, "#[tokio::test"):
+			pending = true
+		case pending && strings.HasPrefix(t, "#["):
+			// more attributes
+		case pending:
+			if m := rustFnRe.FindStringSubmatch(l); m != nil {
+				out[i] = m[1]
+			}
+			pending = false
+		}
+	}
+	return out
+}
+
+// crateRoot returns the folder of the Cargo.toml that contains file.
+func crateRoot(file string) string {
+	for d := filepath.Dir(file); filepath.Dir(d) != d; d = filepath.Dir(d) {
+		if fileExists(filepath.Join(d, "Cargo.toml")) {
+			return d
+		}
+	}
+	return filepath.Dir(file)
+}
+
+var rustResultRe = regexp.MustCompile(`^test (\S+) \.\.\. (ok|FAILED|ignored)`)
+var rustPanicRe = regexp.MustCompile(`^thread '([^']+)'(?: \(\d+\))? panicked at ([^:]+):(\d+):(\d+):?`)
+
+// runCargoTests runs tests of one crate with `cargo test`, matching results by function name.
+func (a *App) runCargoTests(crate string, cases []*testCase, done func()) {
+	tv := a.testing
+	args := []string{"test", "--color", "never", "--"}
+	for _, t := range cases {
+		args = append(args, t.name)
+		t.status = testRunning
+	}
+	cmd := exec.Command("cargo", args...)
+	cmd.Dir = crate
+	cmd.Env = append(os.Environ(), "RUST_BACKTRACE=0")
+	out, err := cmd.StdoutPipe()
+	cmd.Stderr = cmd.Stdout
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		a.notify(NotifyError, "Failed to run cargo test: "+err.Error())
+		tv.running = nil
+		return
+	}
+	tv.running = cmd
+	byName := func(path string) *testCase {
+		name := path[strings.LastIndex(path, "::")+1:]
+		name = strings.TrimPrefix(name, ":")
+		for _, t := range cases {
+			if t.name == name {
+				return t
+			}
+		}
+		return nil
+	}
+	go func() {
+		// Example:
+		// test tests::adds ... ok
+		// thread 'tests::breaks' panicked at src/lib.rs:12:9:
+		// assertion `left == right` failed
+		sc := bufio.NewScanner(out)
+		var panicTest, panicFile string
+		var panicLine int
+		var panicMsg []string
+		flush := func() {
+			if panicTest == "" {
+				return
+			}
+			name, file, line, msg := panicTest, panicFile, panicLine, strings.Join(panicMsg, "\n")
+			a.Post(func() {
+				if t := byName(name); t != nil {
+					t.output = append(t.output, msg)
+					a.addTestDiagnostic(filepath.Join(crate, file), line-1, t.name+": "+msg)
+				}
+			})
+			panicTest, panicMsg = "", nil
+		}
+		for sc.Scan() {
+			line := sc.Text()
+			a.Post(func() { a.output.append("Test Results", line) })
+			if m := rustResultRe.FindStringSubmatch(line); m != nil {
+				path, result := m[1], m[2]
+				a.Post(func() {
+					if t := byName(path); t != nil {
+						switch result {
+						case "ok":
+							t.status = testPassed
+						case "FAILED":
+							t.status = testFailed
+						default:
+							t.status = testSkipped
+						}
+						tv.rebuild()
+					}
+				})
+				continue
+			}
+			if m := rustPanicRe.FindStringSubmatch(line); m != nil {
+				flush()
+				panicTest, panicFile = m[1], m[2]
+				panicLine, _ = strconv.Atoi(m[3])
+				continue
+			}
+			if panicTest != "" {
+				if strings.TrimSpace(line) == "" || strings.HasPrefix(line, "note:") {
+					flush()
+				} else {
+					panicMsg = append(panicMsg, line)
+				}
+			}
+		}
+		flush()
+		_ = cmd.Wait()
+		a.Post(func() {
+			for _, t := range cases {
+				if t.status == testQueued || t.status == testRunning {
+					t.status = testFailed
+				}
+			}
+			tv.rebuild()
+			done()
+		})
+	}()
+}
+
+// addTestDiagnostic adds an error from a test failure to a file.
+func (a *App) addTestDiagnostic(path string, line int, message string) {
+	if a.lsp == nil {
+		return
+	}
+	existing := []lsp.Diagnostic{}
+	for _, fd := range a.lsp.Diagnostics(path) {
+		if fd.Server == "test" {
+			existing = fd.Diagnostics
+		}
+	}
+	a.lsp.SetDiagnostics(path, "test", append(existing, lsp.Diagnostic{
+		Range:    lsp.Range{Start: lsp.Position{Line: max(line, 0)}, End: lsp.Position{Line: max(line, 0), Character: 1 << 20}},
+		Severity: lsp.SeverityError,
+		Source:   "test",
+		Message:  message,
+	}))
 }
 
 //#endregion

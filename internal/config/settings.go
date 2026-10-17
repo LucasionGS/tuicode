@@ -60,6 +60,7 @@ var Defaults = map[string]any{
 	"editor.linkedEditing":                                    false,
 	"remote.autoForwardPorts":                                 true,
 	"editor.codeLens":                                         true,
+	"rust-analyzer.lens.enable":                               true,
 	"deno.codeLens.test":                                      true,
 	"deno.testing.args":                                       []any{"--allow-all", "--no-check"},
 	"json.validate.enable":                                    true,

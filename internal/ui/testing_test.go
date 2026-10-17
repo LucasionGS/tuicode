@@ -156,3 +156,42 @@ func TestVitest(t *testing.T) {
 		t.Fatalf("diagnostics: %+v", v.doc.Diags)
 	}
 }
+
+func TestCargoTesting(t *testing.T) {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		t.Skip("cargo not installed")
+	}
+	src := "pub fn add(a: i32, b: i32) -> i32 {\n    a + b\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn adds() {\n        assert_eq!(add(1, 1), 2);\n    }\n\n    #[test]\n    fn breaks() {\n        assert_eq!(add(1, 1), 3);\n    }\n}\n"
+	dir := tempWorkspace(t, map[string]string{"Cargo.toml": "[package]\nname = \"calc\"\nversion = \"0.1.0\"\nedition = \"2021\"\n", "src/lib.rs": src})
+	t.Setenv("CARGO_TARGET_DIR", t.TempDir())
+	// rustup finds its toolchains through the real home
+	if real := os.Getenv("REAL_HOME"); real != "" {
+		t.Setenv("RUSTUP_HOME", filepath.Join(real, ".rustup"))
+		t.Setenv("CARGO_HOME", filepath.Join(real, ".cargo"))
+	} else {
+		t.Skip("set REAL_HOME")
+	}
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "src", "lib.rs")}})
+	v := h.a.ActiveView()
+	if tests := v.doc.testsInDoc(); tests[9] != "adds" || tests[14] != "breaks" {
+		t.Fatalf("discovered: %v", tests)
+	}
+	h.a.RunCommand("testing.runCurrentFile", nil)
+	adds, breaks := h.a.testAt(v.doc, 9), h.a.testAt(v.doc, 14)
+	for i := 0; i < 3000 && (h.a.testing.running != nil || adds.status < testPassed); i++ {
+		time.Sleep(20 * time.Millisecond)
+		h.flush()
+	}
+	if adds.status != testPassed || breaks.status != testFailed {
+		t.Fatalf("statuses: %d %d\n%s", adds.status, breaks.status, strings.Join(h.a.output.channel("Test Results").lines, "\n"))
+	}
+	found := false
+	for _, d := range v.doc.Diags {
+		if d.Range.Start.Line == 15 && strings.Contains(d.Message, "left == right") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics: %+v\n%s", v.doc.Diags, strings.Join(h.a.output.channel("Test Results").lines, "\n"))
+	}
+}
