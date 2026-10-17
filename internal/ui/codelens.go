@@ -29,15 +29,30 @@ func (v *EditorView) lensRows(line int) int {
 	if _, ok := v.lenses[line]; ok {
 		return 1
 	}
-	if v.doc.conflictStarts[line] && v.app.settings.Bool("merge-conflict.codeLens.enabled", "") {
+	tests, conflicts := v.localLensFlags()
+	if conflicts && v.doc.conflictStarts[line] {
 		return 1
 	}
-	if v.testLensesEnabled() {
-		if _, ok := v.doc.testsInDoc()[line]; ok {
-			return 1
-		}
+	if _, ok := tests[line]; ok {
+		return 1
 	}
 	return 0
+}
+
+// localLensFlags returns the test lines that get lenses and whether conflict lenses are on. Row
+// math asks for every line, so the answer is cached per document version and settings.
+func (v *EditorView) localLensFlags() (map[int]string, bool) {
+	ver := v.buf().Version()
+	if v.lensFlagsVer == ver+1 && v.lensFlagsSettings == v.app.settings {
+		return v.lensFlagsTests, v.lensFlagsConflicts
+	}
+	v.lensFlagsVer, v.lensFlagsSettings = ver+1, v.app.settings
+	v.lensFlagsTests = nil
+	if tests := v.doc.testsInDoc(); len(tests) > 0 && v.testLensesEnabled() {
+		v.lensFlagsTests = tests
+	}
+	v.lensFlagsConflicts = len(v.doc.mergeConflicts()) > 0 && v.app.settings.Bool("merge-conflict.codeLens.enabled", "")
+	return v.lensFlagsTests, v.lensFlagsConflicts
 }
 
 // testLensesEnabled mirrors the Go extension's "go.enableCodeLens": {"runtest": true}.
@@ -81,7 +96,11 @@ func (v *EditorView) testLenses(line int) []*codeLens {
 
 // hasLenses reports whether any lens rows may exist, so row math can't take its fast path.
 func (v *EditorView) hasLenses() bool {
-	return len(v.lenses) > 0 || len(v.doc.mergeConflicts()) > 0 || v.testLensesEnabled() && len(v.doc.testsInDoc()) > 0
+	if len(v.lenses) > 0 {
+		return true
+	}
+	tests, conflicts := v.localLensFlags()
+	return conflicts || len(tests) > 0
 }
 
 // setLenses replaces the code lenses, showing the first line's lens when scrolled to the top.

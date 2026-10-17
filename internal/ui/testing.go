@@ -156,13 +156,40 @@ func (d *Document) testsInDoc() map[int]string {
 	}
 	d.testsVersion = d.Buf.Version() + 1
 	d.tests, d.testKind = nil, ""
-	switch filepath.Ext(d.Buf.Path) {
-	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs", ".rs":
-		lines := d.Buf.Lines()
-		d.testKind = testKind(d.Buf.Path, func() string { return strings.Join(lines, "\n") })
-		d.tests = testsInSource(d.testKind, lines)
+	if !mayHoldTests(d) {
+		return nil
 	}
+	lines := d.Buf.Lines()
+	d.testKind = testKind(d.Buf.Path, func() string { return strings.Join(lines, "\n") })
+	d.tests = testsInSource(d.testKind, lines)
 	return d.tests
+}
+
+// mayHoldTests cheaply rules out documents without tests, so editing big files stays fast.
+func mayHoldTests(d *Document) bool {
+	if d.Buf.LineCount() > 50000 {
+		return false
+	}
+	base := filepath.Base(d.Buf.Path)
+	switch filepath.Ext(base) {
+	case ".go":
+		return strings.HasSuffix(base, "_test.go")
+	case ".ts", ".tsx", ".js", ".jsx", ".mts", ".mjs":
+		// Deno's and Vitest's naming conventions
+		return strings.Contains(base, "test") || strings.Contains(base, "spec")
+	case ".rs":
+		for i := 0; i < d.Buf.LineCount(); i++ {
+			l := d.Buf.Line(i)
+			j := 0
+			for j < len(l) && (l[j] == ' ' || l[j] == '\t') {
+				j++
+			}
+			if j+1 < len(l) && l[j] == '#' && l[j+1] == '[' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // testGroup returns where a test runs: its package for Go, its file for Deno.

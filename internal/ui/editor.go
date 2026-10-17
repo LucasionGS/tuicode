@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"tuicode/internal/buffer"
+	"tuicode/internal/config"
 )
 
 // Fold hides lines Start+1..End.
@@ -72,6 +73,11 @@ type EditorView struct {
 	lensPending       bool
 	lensTimer         bool
 	lensAsked         time.Time
+	// cached local lens state (tests and merge conflicts)
+	lensFlagsVer       int
+	lensFlagsSettings  *config.Settings
+	lensFlagsTests     map[int]string
+	lensFlagsConflicts bool
 
 	preview         bool
 	pinned          bool
