@@ -357,6 +357,7 @@ func (a *App) gotoProblem(dir int) {
 		enc  string
 		msg  string
 		sev  int
+		src  string
 	}
 	var all []loc
 	if a.lsp == nil {
@@ -365,7 +366,14 @@ func (a *App) gotoProblem(dir int) {
 	for path, fds := range a.lsp.AllDiagnostics() {
 		for _, fd := range fds {
 			for _, d := range fd.Diagnostics {
-				all = append(all, loc{path, d.Range.Start, fd.Encoding, d.Message, d.Severity})
+				src := d.Source
+				if src == "" {
+					src = fd.Server
+				}
+				if code := d.CodeString(); code != "" {
+					src += "(" + code + ")"
+				}
+				all = append(all, loc{path, d.Range.Start, fd.Encoding, d.Message, d.Severity, src})
 			}
 		}
 	}
@@ -431,8 +439,7 @@ func (a *App) gotoProblem(dir int) {
 	v.SetCursor(p)
 	v.ensurePosVisible(p, true)
 	a.focusEditor()
-	a.showHover(v, p, false)
-	a.setStatusMessage(fmt.Sprintf("%d of %d problems", idx+1, len(all)))
+	v.showMarker(p.Line, sevOrDefault(l.sev), l.msg, l.src, idx, len(all))
 }
 
 //#endregion

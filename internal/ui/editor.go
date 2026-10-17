@@ -89,6 +89,7 @@ type EditorView struct {
 	inlayPending   bool
 	lightbulbLine  int
 	dirtyDiff      *DirtyDiffPeek
+	marker         *MarkerWidget
 	peek           *PeekView
 	lightbulbKey   [2]int
 
@@ -133,6 +134,7 @@ func (v *EditorView) buf() *buffer.Buffer { return v.doc.Buf }
 // onChange keeps selections and folds of this view aligned with edits made elsewhere.
 func (v *EditorView) onChange(ch buffer.Change) {
 	v.wrapCache = nil
+	v.marker = nil
 	v.app.transformAutoClosed(v, ch)
 	if !v.applying {
 		for i := range v.sels {

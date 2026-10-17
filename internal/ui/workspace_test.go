@@ -461,3 +461,30 @@ func TestProblemHoverActions(t *testing.T) {
 		t.Fatal("problem hover actions missing")
 	}
 }
+
+func TestMarkerWidget(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.go": "package a\n\nvar x = y\n\nvar z = w\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.go")}})
+	h.a.focusEditor()
+	h.a.lsp.SetDiagnostics(filepath.Join(dir, "a.go"), "go", []lsp.Diagnostic{
+		{Range: lsp.Range{Start: lsp.Position{Line: 2, Character: 8}}, Severity: 1, Message: "undefined: y", Source: "compiler"},
+		{Range: lsp.Range{Start: lsp.Position{Line: 4, Character: 8}}, Severity: 2, Message: "undefined: w"},
+	})
+	h.key(tcell.KeyF8, 0, 0)
+	h.flush()
+	if !h.contains("1 of 2 problems") || !h.contains("undefined: y") || !h.contains("compiler") {
+		h.dump()
+		t.Fatal("marker widget missing")
+	}
+	h.key(tcell.KeyF8, 0, 0)
+	h.flush()
+	if !h.contains("2 of 2 problems") || !h.contains("undefined: w") {
+		h.dump()
+		t.Fatal("marker widget did not advance")
+	}
+	h.key(tcell.KeyEscape, 0, 0)
+	h.flush()
+	if h.contains("of 2 problems") {
+		t.Fatal("escape did not close the marker widget")
+	}
+}

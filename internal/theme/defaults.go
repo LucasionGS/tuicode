@@ -308,6 +308,10 @@ var darkDefaults = map[string]string{
 	"testing.iconSkipped":                         "#848484",
 	"testing.iconUnset":                           "#848484",
 	"testing.runAction":                           "#73C991",
+	"editorMarkerNavigation.background":           "=editorWidget.background",
+	"editorMarkerNavigationError.background":      "#F14C4C",
+	"editorMarkerNavigationWarning.background":    "#CCA700",
+	"editorMarkerNavigationInfo.background":       "#3794FF",
 	// merge conflicts
 	"merge.currentHeaderBackground":   "#40C8AE80",
 	"merge.currentContentBackground":  "#40C8AE33",

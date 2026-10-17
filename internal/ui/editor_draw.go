@@ -796,6 +796,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	if v.dirtyDiff != nil {
 		v.dirtyDiff.draw()
 	}
+	if v.marker != nil {
+		v.marker.draw()
+	}
 	if v.peek != nil {
 		v.peek.draw()
 	}

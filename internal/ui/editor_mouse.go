@@ -445,6 +445,10 @@ func (v *EditorView) handleWidgetKey(key, text string, isText bool) bool {
 		v.dirtyDiff = nil
 		return true
 	}
+	if v.marker != nil && key == "escape" {
+		v.marker = nil
+		return true
+	}
 	if v.completion != nil && v.completion.visible() {
 		if v.completion.handleKey(key) {
 			return true
