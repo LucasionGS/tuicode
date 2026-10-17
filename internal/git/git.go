@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // FileStatus is one entry from git status.
@@ -263,4 +264,82 @@ func BlameLine(root, rel string, line int) string {
 	}
 	_ = when
 	return author + ", " + summary
+}
+
+// BlameInfo is the commit that last changed a line.
+type BlameInfo struct {
+	Hash    string
+	Author  string
+	Email   string
+	Time    time.Time
+	Summary string
+}
+
+// Uncommitted reports whether the line has not been committed yet.
+func (b BlameInfo) Uncommitted() bool { return strings.Trim(b.Hash, "0") == "" }
+
+// BlameFile blames every line of a file. contents, when not nil, is the current (possibly unsaved) text.
+func BlameFile(root, rel string, contents *string) ([]BlameInfo, error) {
+	if Guard != nil {
+		if err := Guard(root); err != nil {
+			return nil, err
+		}
+	}
+	args := []string{"blame", "--porcelain"}
+	if contents != nil {
+		args = append(args, "--contents", "-")
+	}
+	args = append(args, "--", rel)
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	if contents != nil {
+		cmd.Stdin = strings.NewReader(*contents)
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	commits := map[string]*BlameInfo{}
+	var lines []BlameInfo
+	var cur *BlameInfo
+	for _, l := range strings.Split(string(out), "\n") {
+		if l == "" {
+			continue
+		}
+		if l[0] == '\t' {
+			// the line's content ends its entry
+			if cur != nil {
+				lines = append(lines, *cur)
+			}
+			continue
+		}
+		fields := strings.Fields(l)
+		if len(fields) >= 3 && len(fields[0]) == 40 {
+			if c, ok := commits[fields[0]]; ok {
+				cur = c
+			} else {
+				cur = &BlameInfo{Hash: fields[0]}
+				commits[fields[0]] = cur
+			}
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		key, val, _ := strings.Cut(l, " ")
+		switch key {
+		case "author":
+			cur.Author = val
+		case "author-mail":
+			cur.Email = strings.Trim(val, "<>")
+		case "author-time":
+			if n, err := strconv.ParseInt(val, 10, 64); err == nil {
+				cur.Time = time.Unix(n, 0)
+			}
+		case "summary":
+			cur.Summary = val
+		}
+	}
+	return lines, nil
 }

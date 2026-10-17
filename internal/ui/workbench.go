@@ -439,6 +439,12 @@ func (a *App) drawStatusBar() {
 		prob += fmt.Sprintf("  %s %d", a.Icon(IcoInfo), infos)
 	}
 	left = append(left, statusItem{text: prob, cmd: "workbench.actions.view.problems", tooltip: "Problems"})
+	if v := a.ActiveView(); v != nil && a.settings.Bool("git.blame.statusBarItem.enabled", "") {
+		if bl, ok := a.blameFor(v.doc, v.Cursor().Line); ok {
+			tip := formatBlame("${authorName}, ${authorDateAgo}: ${subject} (${hashShort})", bl)
+			left = append(left, statusItem{text: a.Icon(IcoGitCommit) + " " + formatBlame(a.settings.String("git.blame.statusBarItem.template", ""), bl), cmd: "git.viewHistory", tooltip: tip})
+		}
+	}
 	if a.lsp != nil {
 		// only the first progress item fits in the status bar
 		if progress := a.lsp.Progress(); len(progress) > 0 {

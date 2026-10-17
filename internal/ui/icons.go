@@ -66,12 +66,13 @@ const (
 	IcoPlay
 	IcoOutline
 	IcoPinned
+	IcoGitCommit
 	IcoCount
 )
 
 var nerdIcons = [IcoCount]string{
 	IcoExplorer: "", IcoSearch: "", IcoSCM: "", IcoDebug: "", IcoExtensions: "",
-	IcoPinned: "", IcoAccount: "", IcoSettings: "", IcoClose: "", IcoChevronRight: "", IcoChevronDown: "",
+	IcoPinned: "", IcoGitCommit: "", IcoAccount: "", IcoSettings: "", IcoClose: "", IcoChevronRight: "", IcoChevronDown: "",
 	IcoChevronUp: "", IcoError: "", IcoWarning: "", IcoInfo: "", IcoBell: "", IcoBellDot: "",
 	IcoBranch: "", IcoSync: "", IcoDirty: "", IcoSplit: "", IcoEllipsis: "",
 	IcoNewFile: "", IcoNewFolder: "", IcoRefresh: "", IcoCollapseAll: "", IcoTerminal: "",
@@ -85,7 +86,7 @@ var nerdIcons = [IcoCount]string{
 
 var plainIcons = [IcoCount]string{
 	IcoExplorer: "▤", IcoSearch: "⌕", IcoSCM: "⑂", IcoDebug: "▷", IcoExtensions: "⊞",
-	IcoPinned: "⚲", IcoAccount: "◯", IcoSettings: "≡", IcoClose: "×", IcoChevronRight: "›", IcoChevronDown: "⌄",
+	IcoPinned: "⚲", IcoGitCommit: "⊸", IcoAccount: "◯", IcoSettings: "≡", IcoClose: "×", IcoChevronRight: "›", IcoChevronDown: "⌄",
 	IcoChevronUp: "⌃", IcoError: "⊗", IcoWarning: "△", IcoInfo: "ⓘ", IcoBell: "◔", IcoBellDot: "◕",
 	IcoBranch: "⎇", IcoSync: "↻", IcoDirty: "●", IcoSplit: "◫", IcoEllipsis: "…",
 	IcoNewFile: "+", IcoNewFolder: "⊕", IcoRefresh: "↻", IcoCollapseAll: "⊟", IcoTerminal: "›",

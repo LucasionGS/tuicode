@@ -55,6 +55,11 @@ type Document struct {
 	semSpans   [][]syntax.Span
 	semVersion int
 	semTimer   *time.Timer
+
+	blame        []git.BlameInfo
+	blameVersion int
+	blameRunning bool
+	blameAsked   time.Time
 }
 
 func (a *App) newDocument(buf *buffer.Buffer) *Document {

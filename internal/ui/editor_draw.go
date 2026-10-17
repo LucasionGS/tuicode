@@ -580,6 +580,18 @@ func (v *EditorView) draw(r Rect, focused bool) {
 				return true
 			})
 		}
+		// git blame after the cursor line
+		if lastSeg && line == cur.Line && focused && len(v.sels) == 1 && a.settings.Bool("git.blame.editorDecoration.enabled", "") {
+			if bl, ok := a.blameFor(v.doc, line); ok {
+				bx := max(x+3, text.X)
+				label := formatBlame(a.settings.String("git.blame.editorDecoration.template", ""), bl)
+				fg := th.OverColor("editorInlayHint.foreground", rowBg)
+				if th.Defined("git.blame.editorDecorationForeground") {
+					fg = th.OverColor("git.blame.editorDecorationForeground", rowBg)
+				}
+				a.cv.Text(bx, y, v.rect.X+v.rect.W, label, base.Background(rowBg).Foreground(fg))
+			}
+		}
 		// rulers
 		for _, rc := range rulers {
 			px := text.X - v.leftCol + rc

@@ -1148,6 +1148,7 @@ func (a *App) refreshGit() {
 			if changedRoot || !sameStatus(oldStatus, st) {
 				for _, d := range a.docs {
 					a.loadGitBase(d)
+					d.blameVersion = 0 // commits change the blame
 				}
 				a.scm.refresh()
 			}
