@@ -17,10 +17,10 @@ func TestRandomInput(t *testing.T) {
 		n, _ = strconv.Atoi(v)
 	}
 	dir := tempWorkspace(t, map[string]string{
-		"main.go":       "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n\tif true {\n\t\treturn\n\t}\n}\n",
-		"src/app.ts":    "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
-		"README.md":     "# Title\n\nSome *text* with `code`.\n",
-		"data/x.json":   "{\"a\": [1, 2, {\"b\": null}]}\n",
+		"main.go":     "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(\"hi\")\n\tif true {\n\t\treturn\n\t}\n}\n",
+		"src/app.ts":  "export function add(a: number, b: number): number {\n  return a + b;\n}\n",
+		"README.md":   "# Title\n\nSome *text* with `code`.\n",
+		"data/x.json": "{\"a\": [1, 2, {\"b\": null}]}\n",
 		"wide/日本.txt": "日本語のテキスト\nemoji 😀 here\n\tTabbed\n",
 	})
 	t.Setenv("SHELL", "/bin/sh")

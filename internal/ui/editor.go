@@ -2,6 +2,8 @@ package ui
 
 import (
 	"sort"
+
+	"github.com/gdamore/tcell/v2"
 	"strings"
 	"unicode"
 
@@ -77,6 +79,9 @@ type EditorView struct {
 	boxCursor      buffer.Pos
 	inlayTop       int
 	inlayPending   bool
+	lightbulbLine  int
+	dirtyDiff      *DirtyDiffPeek
+	lightbulbKey   [2]int
 
 	dragging   bool
 	dragAnchor buffer.Selection
@@ -94,10 +99,11 @@ type inlay struct {
 	label string
 	left  bool
 	right bool
+	color tcell.Color
 }
 
 func (a *App) newEditorView(d *Document) *EditorView {
-	v := &EditorView{app: a, doc: d}
+	v := &EditorView{app: a, doc: d, lightbulbLine: -1, lightbulbKey: [2]int{-1, -1}}
 	v.sels = []buffer.Selection{buffer.Caret(buffer.Pos{})}
 	v.prefX = []int{-1}
 	v.wrap = a.settings.String("editor.wordWrap", d.Lang.ID) != "off"

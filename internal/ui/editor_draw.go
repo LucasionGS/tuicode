@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -10,6 +11,7 @@ import (
 	"tuicode/internal/git"
 	"tuicode/internal/lsp"
 	"tuicode/internal/syntax"
+	"tuicode/internal/theme"
 )
 
 // rowCell is one rendered cell of a visual row.
@@ -20,6 +22,7 @@ type rowCell struct {
 	tab   bool
 	inlay bool
 	ws    bool
+	color tcell.Color // color decorator swatch
 }
 
 type span struct {
@@ -39,6 +42,9 @@ func (v *EditorView) buildRow(line, seg int) ([]rowCell, int) {
 	indent := v.segIndent(line, seg)
 	x := v.visualX(line, start)
 	hints := v.inlayHints[line]
+	if colors := v.colorDecorations(line); len(colors) > 0 {
+		hints = mergeInlays(hints, colors)
+	}
 	hi := 0
 	for hi < len(hints) && hints[hi].col < start {
 		hi++
@@ -52,7 +58,7 @@ func (v *EditorView) buildRow(line, seg int) ([]rowCell, int) {
 			label += " "
 		}
 		for _, r := range label {
-			cells = append(cells, rowCell{ch: r, col: -1, width: RuneWidth(r), inlay: true})
+			cells = append(cells, rowCell{ch: r, col: -1, width: RuneWidth(r), inlay: true, color: h.color})
 		}
 	}
 	for i := start; i < end; i++ {
@@ -180,6 +186,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	guideX, guideFrom, guideTo := v.activeIndentGuide()
 	bracketColors := a.settings.Bool("editor.bracketPairColorization.enabled", "")
 	a.maybeRequestInlayHints(v)
+	a.maybeRequestLightbulb(v)
 	if v.doc.semVersion != v.buf().Version() && v.doc.semTimer == nil {
 		a.scheduleSemanticTokens(v.doc)
 	}
@@ -271,6 +278,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 				a.cv.Set(gx, y, '▎', styleFB(th.C(key), th.C("editorGutter.background")))
 			}
 		}
+		gitX := gx
 		gx++
 		// fold chevron
 		if row.seg == 0 && a.settings.Bool("editor.folding", "") {
@@ -285,9 +293,25 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		foldX := gx
 		lineNo := line
 		a.addHit(Rect{r.X, y, v.gutterW, 1}, func(ev MouseEvent) bool {
+			if ev.Kind == MousePress && ev.X == gitX && ev.Button == tcell.Button1 {
+				if _, changed := v.doc.gitChanges[lineNo]; changed {
+					v.openDirtyDiff(lineNo)
+					return true
+				}
+			}
 			v.gutterMouse(ev, lineNo, ev.X == foldX)
 			return true
 		})
+		if v.lightbulbLine == line && row.seg == 0 && focused {
+			lb := a.Icon(IcoLightbulb)
+			a.cv.Text(r.X, y, r.X+1, lb, styleFB(th.C("editorLightBulb.foreground"), th.C("editorGutter.background")))
+			a.addHit(Rect{r.X, y, 1, 1}, func(ev MouseEvent) bool {
+				if ev.Kind == MousePress {
+					a.showCodeActions(v, "")
+				}
+				return true
+			})
+		}
 
 		// text
 		cells, indent := v.buildRow(line, row.seg)
@@ -314,7 +338,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 				break
 			}
 			st := base.Background(rowBg)
-			if c.inlay {
+			if c.inlay && c.color != 0 {
+				st = styleFB(c.color, rowBg)
+			} else if c.inlay {
 				st = styleFB(th.C("editorInlayHint.foreground"), th.OverColor("editorInlayHint.background", rowBg))
 			} else {
 				for si < len(spans) && spans[si].End <= c.col {
@@ -670,6 +696,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	}
 	if v.codeActions != nil {
 		v.codeActions.draw()
+	}
+	if v.dirtyDiff != nil {
+		v.dirtyDiff.draw()
 	}
 	a.cv.clip = Rect{0, 0, a.width, a.height}
 }
@@ -1156,3 +1185,46 @@ func (v *EditorView) drawScrollbar(r Rect) {
 }
 
 //#endregion
+
+var colorLangs = map[string]bool{"css": true, "scss": true, "less": true, "html": true, "vue": true, "svelte": true, "json": true, "jsonc": true, "javascriptreact": true, "typescriptreact": true}
+
+// colorDecorations finds hex colors on a line and returns swatches to draw before them.
+func (v *EditorView) colorDecorations(line int) []inlay {
+	if !colorLangs[v.lang()] {
+		return nil
+	}
+	if b, ok := v.app.settings.Get("editor.colorDecorators", v.lang()).(bool); ok && !b {
+		return nil
+	}
+	l := v.buf().Line(line)
+	var out []inlay
+	for i := 0; i < len(l); i++ {
+		if l[i] != '#' {
+			continue
+		}
+		j := i + 1
+		for j < len(l) && j-i <= 8 && isHexRune(l[j]) {
+			j++
+		}
+		n := j - i - 1
+		if (n == 3 || n == 4 || n == 6 || n == 8) && (j == len(l) || !isWordRune(l[j])) {
+			if c, ok := theme.ParseColor(string(l[i:j])); ok {
+				out = append(out, inlay{col: i, label: "■", right: true, color: c.Tcell()})
+			}
+		}
+		i = j - 1
+	}
+	return out
+}
+
+func isHexRune(r rune) bool {
+	return r >= '0' && r <= '9' || r >= 'a' && r <= 'f' || r >= 'A' && r <= 'F'
+}
+
+func mergeInlays(a, b []inlay) []inlay {
+	out := make([]inlay, 0, len(a)+len(b))
+	out = append(out, a...)
+	out = append(out, b...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].col < out[j].col })
+	return out
+}

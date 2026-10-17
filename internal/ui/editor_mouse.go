@@ -390,6 +390,7 @@ func (v *EditorView) closeWidgets(keepFind bool) {
 	v.sig = nil
 	v.hover = nil
 	v.codeActions = nil
+	v.dirtyDiff = nil
 	if v.rename != nil {
 		v.rename = nil
 		v.app.setFocus(FocusEditor)
@@ -407,6 +408,10 @@ func (v *EditorView) handleWidgetKey(key, text string, isText bool) bool {
 	}
 	if v.codeActions != nil {
 		return v.codeActions.handleKey(key)
+	}
+	if v.dirtyDiff != nil && key == "escape" {
+		v.dirtyDiff = nil
+		return true
 	}
 	if v.completion != nil && v.completion.visible() {
 		if v.completion.handleKey(key) {

@@ -5,12 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
 
+	"tuicode/internal/buffer"
 	"tuicode/internal/term"
 )
 
@@ -44,6 +48,15 @@ type TerminalPanel struct {
 	nextID int
 	terms  []*TermInstance // flat list for quick checks
 	rect   Rect
+
+	findOpen    bool
+	findInput   TextInput
+	findMatches []termMatch
+	findIdx     int
+}
+
+type termMatch struct {
+	row, col, length int // row is absolute: negative rows are in the scrollback
 }
 
 func newTerminalPanel(a *App) *TerminalPanel {
@@ -358,7 +371,124 @@ func (tp *TerminalPanel) rename() {
 }
 
 func (tp *TerminalPanel) find() {
-	tp.app.setStatusMessage("Terminal find: use Shift+PageUp to scroll back, or pipe output to a file and open it.")
+	if tp.current() == nil {
+		return
+	}
+	if tp.findInput.app == nil {
+		tp.findInput = newTextInput(tp.app, "Find")
+		tp.findInput.OnChange = func() { tp.runFind(true) }
+	}
+	tp.findOpen = true
+	tp.findInput.SelectAll()
+	tp.runFind(true)
+}
+
+// runFind searches the active terminal's scrollback and screen.
+func (tp *TerminalPanel) runFind(jump bool) {
+	cur := tp.current()
+	tp.findMatches = nil
+	q := strings.ToLower(tp.findInput.Text())
+	if cur == nil || q == "" {
+		return
+	}
+	t := cur.t
+	t.Lock()
+	sb := t.ScrollbackLen()
+	_, rows := t.Size()
+	for row := -sb; row < rows; row++ {
+		line := t.LineAt(row)
+		var rs []rune
+		for _, c := range line.Cells {
+			if c.Width == 0 {
+				continue
+			}
+			rs = append(rs, unicode.ToLower(c.Ch))
+		}
+		text := string(rs)
+		off := 0
+		for {
+			i := strings.Index(text[off:], q)
+			if i < 0 {
+				break
+			}
+			col := len([]rune(text[:off+i]))
+			tp.findMatches = append(tp.findMatches, termMatch{row: row, col: col, length: len([]rune(q))})
+			off += i + len(q)
+		}
+	}
+	t.Unlock()
+	tp.findIdx = len(tp.findMatches) - 1
+	if jump {
+		tp.revealMatch()
+	}
+}
+
+func (tp *TerminalPanel) findMove(d int) {
+	if len(tp.findMatches) == 0 {
+		return
+	}
+	tp.findIdx = (tp.findIdx + d + len(tp.findMatches)) % len(tp.findMatches)
+	tp.revealMatch()
+}
+
+func (tp *TerminalPanel) revealMatch() {
+	cur := tp.current()
+	if cur == nil || tp.findIdx < 0 || tp.findIdx >= len(tp.findMatches) {
+		return
+	}
+	m := tp.findMatches[tp.findIdx]
+	h := max(cur.rect.H, 1)
+	// visible rows are [-scrollOff, h-scrollOff)
+	if m.row < -cur.scrollOff || m.row >= h-cur.scrollOff {
+		cur.scrollOff = max(-m.row+h/2, 0)
+		cur.t.Lock()
+		cur.scrollOff = min(cur.scrollOff, cur.t.ScrollbackLen())
+		cur.t.Unlock()
+	}
+}
+
+// findHandleKey handles keys while the terminal find widget is open.
+func (tp *TerminalPanel) findHandleKey(key string) bool {
+	switch key {
+	case "escape":
+		tp.findOpen = false
+		tp.findMatches = nil
+		return true
+	case "enter", "f3":
+		tp.findMove(-1)
+		return true
+	case "shift+enter", "shift+f3":
+		tp.findMove(1)
+		return true
+	}
+	return false
+}
+
+func (tp *TerminalPanel) drawFind(r Rect) {
+	a := tp.app
+	th := a.theme
+	w := min(40, r.W-2)
+	x := r.X + r.W - w - 1
+	bgc := th.C("editorWidget.background")
+	a.cv.Fill(Rect{x, r.Y, w, 1}, ' ', styleFB(th.C("editorWidget.foreground"), bgc))
+	ibg := th.C("input.background")
+	ist := styleFB(th.C("input.foreground"), ibg)
+	iw := w - 16
+	a.cv.Fill(Rect{x + 1, r.Y, iw, 1}, ' ', ist)
+	tp.findInput.Draw(x+2, r.Y, iw-2, ist, styleFB(th.C("input.placeholderForeground"), ibg), a.focus == FocusPanel)
+	count := "No results"
+	if len(tp.findMatches) > 0 {
+		count = fmt.Sprintf("%d of %d", len(tp.findMatches)-tp.findIdx, len(tp.findMatches))
+	}
+	a.cv.Text(x+iw+2, r.Y, x+w-2, count, styleFB(th.C("editorWidget.foreground"), bgc))
+	a.cv.Text(x+w-2, r.Y, x+w-1, a.Icon(IcoClose), styleFB(th.C("editorWidget.foreground"), bgc))
+	a.addHit(Rect{x + w - 2, r.Y, 1, 1}, func(ev MouseEvent) bool {
+		if ev.Kind == MousePress {
+			tp.findOpen = false
+			tp.findMatches = nil
+		}
+		return true
+	})
 }
 
 func (a *App) terminalItems() []QuickItem {
@@ -625,7 +755,7 @@ func (tp *TerminalPanel) draw(r Rect) {
 				a.cv.Set(x+w-1, y, '│', styleFB(th.OverColor("terminal.border", bgc), bgc))
 			}
 		}
-		focused := a.focus == FocusPanel && a.panelView == "terminal" && i == g.active
+		focused := a.focus == FocusPanel && a.panelView == "terminal" && i == g.active && !tp.findOpen
 		tp.drawTerm(ti, tr, focused, i == g.active)
 		idx := i
 		a.addHit(tr, func(ev MouseEvent) bool {
@@ -634,6 +764,9 @@ func (tp *TerminalPanel) draw(r Rect) {
 			return true
 		})
 		x += w
+	}
+	if tp.findOpen {
+		tp.drawFind(area)
 	}
 }
 
@@ -687,6 +820,20 @@ func (tp *TerminalPanel) drawTerm(ti *TermInstance, r Rect, focused, active bool
 				inSel := (row > ss[0] || row == ss[0] && x >= ss[1]) && (row < se[0] || row == se[0] && x <= se[1])
 				if inSel {
 					bg = selBg
+				}
+			}
+			if tp.findOpen && active {
+				for mi, m := range tp.findMatches {
+					if m.row == row && x >= m.col && x < m.col+m.length {
+						key := "terminal.findMatchHighlightBackground"
+						if mi == tp.findIdx {
+							key = "terminal.findMatchBackground"
+						}
+						if !th.Has(key) {
+							key = strings.Replace(key, "terminal.", "editor.", 1)
+						}
+						bg = th.OverColor(key, bg)
+					}
 				}
 			}
 			st := styleFB(fg, bg)
@@ -856,6 +1003,12 @@ func (tp *TerminalPanel) mouse(ti *TermInstance, r Rect, ev MouseEvent) {
 	if ev.Kind == MousePress {
 		a.setFocus(FocusPanel)
 	}
+	// ctrl+click opens links and file paths
+	if ev.Kind == MousePress && ev.Button == tcell.Button1 && ev.Mods&tcell.ModCtrl != 0 {
+		if tp.openLinkAt(ti, r, ev.X, ev.Y) {
+			return
+		}
+	}
 	// forward to applications that requested mouse reporting
 	if t.MouseMode != 0 && ev.Mods&tcell.ModShift == 0 && ti.scrollOff == 0 {
 		tp.forwardMouse(ti, r, ev)
@@ -1022,3 +1175,77 @@ func (tp *TerminalPanel) forwardMouse(ti *TermInstance, r Rect, ev MouseEvent) {
 //#endregion
 
 var _ = utf8.RuneLen
+
+var termPathRe = regexp.MustCompile(`^(.+?)(?::(\d+))?(?::(\d+))?:?$`)
+
+// openLinkAt opens the URL or file path under the given screen position.
+func (tp *TerminalPanel) openLinkAt(ti *TermInstance, r Rect, x, y int) bool {
+	a := tp.app
+	t := ti.t
+	t.Lock()
+	line := t.LineAt(y - r.Y - ti.scrollOff)
+	t.Unlock()
+	col := x - r.X
+	if col < 0 || col >= len(line.Cells) {
+		return false
+	}
+	isDelim := func(ch rune) bool {
+		return ch == ' ' || ch == 0 || strings.ContainsRune("\"'`()[]{}<>|,;", ch)
+	}
+	if isDelim(line.Cells[col].Ch) {
+		return false
+	}
+	s, e := col, col
+	for s > 0 && !isDelim(line.Cells[s-1].Ch) {
+		s--
+	}
+	for e+1 < len(line.Cells) && !isDelim(line.Cells[e+1].Ch) {
+		e++
+	}
+	var sb strings.Builder
+	for i := s; i <= e; i++ {
+		if line.Cells[i].Width > 0 {
+			sb.WriteRune(line.Cells[i].Ch)
+		}
+	}
+	word := strings.TrimRight(sb.String(), ".")
+	if strings.HasPrefix(word, "http://") || strings.HasPrefix(word, "https://") {
+		_ = exec.Command("xdg-open", word).Start()
+		a.setStatusMessage("Opening " + word)
+		return true
+	}
+	m := termPathRe.FindStringSubmatch(word)
+	if m == nil {
+		return false
+	}
+	path := expandHome(m[1])
+	if !filepath.IsAbs(path) {
+		base := t.Cwd
+		if base == "" {
+			base = a.root
+		}
+		path = filepath.Join(base, path)
+	}
+	st, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	if st.IsDir() {
+		a.showSidebar("explorer")
+		a.explorer.reveal(path, true)
+		return true
+	}
+	v := a.OpenFile(path, false)
+	if v != nil && m[2] != "" {
+		ln, _ := strconv.Atoi(m[2])
+		cl := 1
+		if m[3] != "" {
+			cl, _ = strconv.Atoi(m[3])
+		}
+		p := v.buf().Clamp(buffer.Pos{Line: ln - 1, Col: cl - 1})
+		v.SetCursor(p)
+		v.ensurePosVisible(p, true)
+	}
+	a.focusEditor()
+	return true
+}

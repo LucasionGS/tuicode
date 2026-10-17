@@ -354,12 +354,15 @@ func (rb *RenameBox) draw() {
 	if !ok {
 		return
 	}
-	w := max(30, StrWidth(rb.input.Text())+4)
-	top := y + 1
-	if top+2 > a.height {
-		top = y - 2
+	// the input sits on top of the symbol, the hint below it, like VS Code
+	hint := "Enter to Rename"
+	w := max(StrWidth(hint)+2, StrWidth(rb.input.Text())+4, 24)
+	r := Rect{x - 1, y, w, 2}
+	hintY := y + 1
+	if y+1 >= a.height-1 {
+		r.Y = y - 1
+		hintY = y - 1
 	}
-	r := Rect{x, top, w, 2}
 	if r.X+r.W > a.width {
 		r.X = max(a.width-r.W, 0)
 	}
@@ -368,9 +371,10 @@ func (rb *RenameBox) draw() {
 	a.cv.Fill(r, ' ', styleFB(th.C("editorWidget.foreground"), bgc))
 	ibg := th.C("input.background")
 	ist := styleFB(th.C("input.foreground"), ibg)
-	a.cv.Fill(Rect{r.X + 1, r.Y, r.W - 2, 1}, ' ', ist)
-	rb.input.Draw(r.X+1, r.Y, r.W-2, ist, ist, a.focus == FocusWidget)
-	a.cv.Text(r.X+1, r.Y+1, r.X+r.W-1, "Enter to Rename, Shift+Enter to Preview", styleFB(th.C("descriptionForeground"), bgc))
+	a.cv.Fill(Rect{r.X, y, r.W, 1}, ' ', ist)
+	a.cv.Set(r.X, y, '▏', styleFB(th.C("focusBorder"), ibg))
+	rb.input.Draw(r.X+1, y, r.W-2, ist, ist, a.focus == FocusWidget)
+	a.cv.Text(r.X+1, hintY, r.X+r.W-1, hint, styleFB(th.C("descriptionForeground"), bgc))
 }
 
 //#endregion
@@ -789,3 +793,42 @@ func (a *App) maybeRequestInlayHints(v *EditorView) {
 //#endregion
 
 var _ = tcell.ColorDefault
+
+// maybeRequestLightbulb asks for quick fixes on the cursor line when it has diagnostics.
+func (a *App) maybeRequestLightbulb(v *EditorView) {
+	if a.lsp == nil || a.settings.String("editor.lightbulb.enabled", v.lang()) == "off" {
+		v.lightbulbLine = -1
+		return
+	}
+	line := v.Cursor().Line
+	key := [2]int{line, v.buf().Version()}
+	if v.lightbulbKey == key {
+		return
+	}
+	v.lightbulbKey = key
+	v.lightbulbLine = -1
+	hasDiag := false
+	for _, d := range v.doc.Diags {
+		if d.Range.Start.Line <= line && d.Range.End.Line >= line && d.Severity <= 3 {
+			hasDiag = true
+			break
+		}
+	}
+	if !hasDiag {
+		return
+	}
+	c := a.lsp.Client(v.buf())
+	if c == nil || !c.Supports("codeActionProvider") {
+		return
+	}
+	params := a.codeActionParams(v, "")
+	params["context"].(map[string]any)["only"] = []string{"quickfix"}
+	a.lsp.Request(v.buf(), "textDocument/codeAction", params, func(raw json.RawMessage, err error) {
+		if err != nil || v.lightbulbKey != key {
+			return
+		}
+		if len(parseCodeActions(raw)) > 0 {
+			v.lightbulbLine = line
+		}
+	})
+}

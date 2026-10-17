@@ -855,8 +855,13 @@ func (a *App) handleKey(ev *tcell.EventKey) {
 				return
 			}
 		}
+		if a.focus == FocusPanel && a.panelVisible && a.panelView == "terminal" && a.terminals.findOpen {
+			if a.terminals.findHandleKey(key) {
+				return
+			}
+		}
 		if a.focus == FocusPanel && a.panelVisible {
-			if a.panelView == "terminal" {
+			if a.panelView == "terminal" && !a.terminals.findOpen {
 				// the shell gets keys unless they are bound to a command that skips the shell
 				b, partial := a.matchBinding([]string{key})
 				skip := (b != nil && (commandsToSkipShell[b.Command] || a.skipShellSetting(b.Command))) || (partial && key == "ctrl+k" && false)
@@ -943,6 +948,10 @@ func (a *App) focusedInput() *TextInput {
 	case FocusSidebar:
 		if a.sidebarVisible {
 			return a.sidebarInput()
+		}
+	case FocusPanel:
+		if a.panelVisible && a.panelView == "terminal" && a.terminals.findOpen {
+			return &a.terminals.findInput
 		}
 	}
 	return nil
