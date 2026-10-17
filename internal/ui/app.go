@@ -79,23 +79,23 @@ type App struct {
 	screen tcell.Screen
 	cv     *Canvas
 
-	theme       *theme.Theme
-	settings    *config.Settings
-	root        string
-	gitRoot     string
-	workspace   *config.Workspace // open .code-workspace, nil for a single folder
-	lspDisabled bool
+	theme        *theme.Theme
+	settings     *config.Settings
+	root         string
+	gitRoot      string
+	workspace    *config.Workspace // open .code-workspace, nil for a single folder
+	lspDisabled  bool
 	hiddenGroups []*EditorGroup // the full layout while one group is maximized
 	lastRunTask  *task
-	gitBranch   string
-	gitAhead    int
-	gitBehind   int
-	gitHasUp    bool
-	gitStatus   []git.FileStatus
-	gitByPath   map[string]git.FileStatus
-	gitBusy     bool
-	lsp         *lsp.Manager
-	nerdIcons   bool
+	gitBranch    string
+	gitAhead     int
+	gitBehind    int
+	gitHasUp     bool
+	gitStatus    []git.FileStatus
+	gitByPath    map[string]git.FileStatus
+	gitBusy      bool
+	lsp          *lsp.Manager
+	nerdIcons    bool
 
 	commands       map[string]*Command
 	bindings       []config.Binding
