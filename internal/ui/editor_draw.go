@@ -189,6 +189,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	frameLine := a.currentFrameLine(v)
 	a.maybeRequestInlayHints(v)
 	a.maybeRequestCodeLens(v)
+	v.doc.mergeConflicts()
 	a.maybeRequestLightbulb(v)
 	if v.doc.semVersion != v.buf().Version() && v.doc.semTimer == nil {
 		a.scheduleSemanticTokens(v.doc)
@@ -247,6 +248,11 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		}
 		if frameLine == line {
 			rowBg = th.OverColor("editor.stackFrameHighlightBackground", bgc)
+		}
+		if len(v.doc.conflicts) > 0 && a.settings.Bool("merge-conflict.decorators.enabled", "") {
+			if key := v.doc.conflictLineKey(line); key != "" {
+				rowBg = th.OverColor(key, bgc)
+			}
 		}
 		// gutter
 		gst := styleFB(th.C("editorLineNumber.foreground"), th.C("editorGutter.background"))
@@ -579,6 +585,16 @@ func (v *EditorView) draw(r Rect, focused bool) {
 				}
 				return true
 			})
+		}
+		// conflict header labels
+		if lastSeg && v.doc.conflictStarts[line] || lastSeg && len(v.doc.conflicts) > 0 && strings.HasPrefix(b.LineString(line), ">>>>>>>") {
+			label := "(Current Change)"
+			if !v.doc.conflictStarts[line] {
+				label = "(Incoming Change)"
+			}
+			if _, ok := v.doc.conflictAt(line); ok {
+				a.cv.Text(max(x+1, text.X), y, text.X+text.W, label, base.Background(rowBg).Foreground(th.OverColor("descriptionForeground", rowBg)))
+			}
 		}
 		// git blame after the cursor line
 		if lastSeg && line == cur.Line && focused && len(v.sels) == 1 && a.settings.Bool("git.blame.editorDecoration.enabled", "") {

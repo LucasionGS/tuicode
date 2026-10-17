@@ -16,6 +16,7 @@ type codeLens struct {
 	raw     json.RawMessage
 	line    int
 	command *lsp.Command
+	run     func() // built-in lenses (merge conflicts) run this instead of a command
 }
 
 type lspCodeLens struct {
@@ -25,13 +26,18 @@ type lspCodeLens struct {
 
 // lensRows returns how many code lens rows are drawn above line.
 func (v *EditorView) lensRows(line int) int {
-	if len(v.lenses) == 0 {
-		return 0
-	}
 	if _, ok := v.lenses[line]; ok {
 		return 1
 	}
+	if v.doc.conflictStarts[line] && v.app.settings.Bool("merge-conflict.codeLens.enabled", "") {
+		return 1
+	}
 	return 0
+}
+
+// hasLenses reports whether any lens rows may exist, so row math can't take its fast path.
+func (v *EditorView) hasLenses() bool {
+	return len(v.lenses) > 0 || len(v.doc.mergeConflicts()) > 0
 }
 
 // setLenses replaces the code lenses, showing the first line's lens when scrolled to the top.
@@ -46,7 +52,7 @@ func (v *EditorView) setLenses(m map[int][]*codeLens) {
 
 // lensTitles returns the visible lens titles on a line.
 func (v *EditorView) lensTitles(line int) []*codeLens {
-	var out []*codeLens
+	out := v.conflictLenses(line)
 	for _, l := range v.lenses[line] {
 		if l.command != nil && l.command.Title != "" {
 			out = append(out, l)
@@ -139,6 +145,10 @@ func (a *App) maybeRequestCodeLens(v *EditorView) {
 
 // runCodeLens executes a lens command, handling VS Code's client side commands.
 func (a *App) runCodeLens(v *EditorView, l *codeLens) {
+	if l.run != nil {
+		l.run()
+		return
+	}
 	cmd := l.command
 	if cmd == nil || cmd.Command == "" {
 		return

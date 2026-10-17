@@ -56,6 +56,10 @@ type Document struct {
 	semVersion int
 	semTimer   *time.Timer
 
+	conflicts       []mergeConflict
+	conflictStarts  map[int]bool
+	conflictVersion int
+
 	mdFences       []bool // lines inside fenced code blocks
 	mdFenceVersion int
 

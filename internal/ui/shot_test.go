@@ -364,3 +364,15 @@ func TestScreenshotProject(t *testing.T) {
 		h.a.lsp.ShutdownAll()
 	}
 }
+
+func TestScreenshotMerge(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" {
+		t.Skip("set TUI_SHOT")
+	}
+	src := "package main\n\nfunc main() {\n<<<<<<< HEAD\n\tfmt.Println(\"mine\")\n=======\n\tfmt.Println(\"theirs\")\n\tlog.Print(\"x\")\n>>>>>>> feature\n}\n"
+	dir := tempWorkspace(t, map[string]string{"main.go": src})
+	h := newHarness(t, 140, 20, Options{Paths: []string{filepath.Join(dir, "main.go")}})
+	h.settle()
+	h.snapshot(filepath.Join(out, "merge.json"))
+}

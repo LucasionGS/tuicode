@@ -59,6 +59,8 @@ var Defaults = map[string]any{
 	"editor.autoClosingBrackets":                  "languageDefined",
 	"editor.linkedEditing":                        false,
 	"editor.codeLens":                             true,
+	"merge-conflict.codeLens.enabled":             true,
+	"merge-conflict.decorators.enabled":           true,
 	"git.blame.editorDecoration.enabled":          false,
 	"git.blame.editorDecoration.template":         "${subject}, ${authorName} (${authorDateAgo})",
 	"git.blame.statusBarItem.enabled":             false,

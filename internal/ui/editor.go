@@ -663,7 +663,7 @@ func vposLess(a, b vpos) bool {
 
 // totalRows returns the number of visual rows in the document.
 func (v *EditorView) totalRows() int {
-	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
+	if !v.wrap && len(v.folds) == 0 && !v.hasLenses() {
 		return v.buf().LineCount()
 	}
 	n := 0
@@ -675,7 +675,7 @@ func (v *EditorView) totalRows() int {
 
 // rowIndex returns the index of a visual row from the document start.
 func (v *EditorView) rowIndex(p vpos) int {
-	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
+	if !v.wrap && len(v.folds) == 0 && !v.hasLenses() {
 		return p.line
 	}
 	n := 0
@@ -690,7 +690,7 @@ func (v *EditorView) rowAtIndex(i int) vpos {
 	if i <= 0 {
 		return vpos{0, 0}
 	}
-	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
+	if !v.wrap && len(v.folds) == 0 && !v.hasLenses() {
 		return vpos{min(i, v.buf().LineCount()-1), 0}
 	}
 	n := 0

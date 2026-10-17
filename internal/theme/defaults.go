@@ -297,6 +297,13 @@ var darkDefaults = map[string]string{
 	"settings.modifiedItemIndicator": "#0C7D9D",
 	"debugToolBar.background":        "#333333",
 	"welcomePage.tileBackground":     "#252526",
+	// merge conflicts
+	"merge.currentHeaderBackground":   "#40C8AE80",
+	"merge.currentContentBackground":  "#40C8AE33",
+	"merge.incomingHeaderBackground":  "#40A6FF80",
+	"merge.incomingContentBackground": "#40A6FF33",
+	"merge.commonHeaderBackground":    "#60606066",
+	"merge.commonContentBackground":   "#60606029",
 }
 
 var lightOverrides = map[string]string{

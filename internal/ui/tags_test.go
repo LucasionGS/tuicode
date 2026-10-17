@@ -227,3 +227,42 @@ func TestMarkdownFolding(t *testing.T) {
 		t.Fatalf("outline: %+v", syms)
 	}
 }
+
+func TestMergeConflicts(t *testing.T) {
+	src := "a\n<<<<<<< HEAD\nmine\n=======\ntheirs\n>>>>>>> feature\nb\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n"
+	dir := tempWorkspace(t, map[string]string{"f.txt": src})
+	h := newHarness(t, 160, 30, Options{Paths: []string{filepath.Join(dir, "f.txt")}})
+	h.flush()
+	if !h.contains("Accept Current Change | Accept Incoming Change | Accept Both Changes | Compare Changes") {
+		h.dump()
+		t.Fatal("conflict lenses missing")
+	}
+	v := h.a.ActiveView()
+	v.SetCursor(buffer.Pos{Line: 2})
+	h.a.RunCommand("merge-conflict.accept.incoming", nil)
+	if got := h.text(); got != "a\ntheirs\nb\n<<<<<<< HEAD\nx\n=======\ny\n>>>>>>> feature\n" {
+		t.Fatalf("accept incoming: %q", got)
+	}
+	h.a.RunCommand("merge-conflict.accept.all-both", nil)
+	if got := h.text(); got != "a\ntheirs\nb\nx\ny\n" {
+		t.Fatalf("accept all both: %q", got)
+	}
+	h.flush()
+	if h.contains("Accept Current Change") {
+		t.Fatal("lens left after resolving")
+	}
+	// clicking a lens resolves its conflict
+	v.buf().ApplyEdits([]buffer.Edit{{Range: buffer.Range{Start: buffer.Pos{Line: 5}, End: buffer.Pos{Line: 5}}, Text: "<<<<<<< HEAD\n1\n=======\n2\n>>>>>>> other\n"}}, nil, "")
+	h.flush()
+	for y, row := range h.screen() {
+		if x := strings.Index(row, "Accept Current Change"); x >= 0 {
+			cx := len([]rune(row[:x])) + 2
+			h.a.handleEvent(tcell.NewEventMouse(cx, y, tcell.Button1, 0))
+			h.a.handleEvent(tcell.NewEventMouse(cx, y, tcell.ButtonNone, 0))
+			break
+		}
+	}
+	if got := h.text(); got != "a\ntheirs\nb\nx\ny\n1\n" {
+		t.Fatalf("lens click: %q", got)
+	}
+}

@@ -325,6 +325,28 @@ func firstLine(s string) string {
 func (a *App) registerGitCommands() {
 	a.cmd("git.commit", "Git", "Commit", func(any) { a.gitCommit(false) })
 	a.alias("git.commitStaged", "git.commit")
+	conflictCmd := func(which string) func(any) {
+		return a.ed(func(v *EditorView) {
+			if c, ok := v.doc.conflictAt(v.Cursor().Line); ok {
+				v.acceptConflict(c, which)
+			} else {
+				a.setStatusMessage("Editor cursor is not within a merge conflict")
+			}
+		})
+	}
+	a.cmd("merge-conflict.accept.current", "Merge Conflict", "Accept Current", conflictCmd("current"))
+	a.cmd("merge-conflict.accept.incoming", "Merge Conflict", "Accept Incoming", conflictCmd("incoming"))
+	a.cmd("merge-conflict.accept.both", "Merge Conflict", "Accept Both", conflictCmd("both"))
+	a.cmd("merge-conflict.accept.all-current", "Merge Conflict", "Accept All Current", a.ed(func(v *EditorView) { v.acceptAllConflicts("current") }))
+	a.cmd("merge-conflict.accept.all-incoming", "Merge Conflict", "Accept All Incoming", a.ed(func(v *EditorView) { v.acceptAllConflicts("incoming") }))
+	a.cmd("merge-conflict.accept.all-both", "Merge Conflict", "Accept All Both", a.ed(func(v *EditorView) { v.acceptAllConflicts("both") }))
+	a.cmd("merge-conflict.next", "Merge Conflict", "Next Conflict", a.ed(func(v *EditorView) { v.gotoConflict(1) }))
+	a.cmd("merge-conflict.previous", "Merge Conflict", "Previous Conflict", a.ed(func(v *EditorView) { v.gotoConflict(-1) }))
+	a.cmd("merge-conflict.compare", "Merge Conflict", "Compare Current Conflict", a.ed(func(v *EditorView) {
+		if c, ok := v.doc.conflictAt(v.Cursor().Line); ok {
+			v.compareConflict(c)
+		}
+	}))
 	a.cmd("git.commitAmend", "Git", "Commit (Amend)", func(any) { a.gitCommit(true) })
 	a.cmd("git.commitAll", "Git", "Commit All", func(any) {
 		a.gitRun(func() error { return git.Stage(a.gitRoot, ".") })
