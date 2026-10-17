@@ -59,7 +59,7 @@ func fakeServer(in io.Reader, out io.Writer) {
 		_ = json.Unmarshal(body, &msg)
 		switch msg.Method {
 		case "initialize":
-			send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"capabilities": map[string]any{"textDocumentSync": 2, "positionEncoding": "utf-16"}}})
+			send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"capabilities": map[string]any{"textDocumentSync": 2, "positionEncoding": "utf-16", "diagnosticProvider": map[string]any{"interFileDependencies": false}}}})
 		case "textDocument/didOpen":
 			var p struct {
 				TextDocument struct {
@@ -85,6 +85,15 @@ func fakeServer(in io.Reader, out io.Writer) {
 				e := offsetUTF16(text, c.Range.End)
 				text = text[:s] + c.Text + text[e:]
 			}
+		case "textDocument/diagnostic":
+			// one warning per line containing TODO
+			var items []map[string]any
+			for i, l := range strings.Split(text, "\n") {
+				if c := strings.Index(l, "TODO"); c >= 0 {
+					items = append(items, map[string]any{"range": Range{Start: Position{i, c}, End: Position{i, c + 4}}, "severity": 2, "message": "todo"})
+				}
+			}
+			send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": map[string]any{"kind": "full", "resultId": "1", "items": items}})
 		case "test/text":
 			send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "result": text})
 		case "shutdown":
@@ -175,5 +184,45 @@ func TestIncrementalSync(t *testing.T) {
 	if got != b.Text() {
 		t.Fatalf("server text out of sync:\nserver: %q\nbuffer: %q", got, b.Text())
 	}
+	m.ShutdownAll()
+}
+
+func TestPullDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(path, []byte("package main\n// TODO one\n"), 0o644)
+	exe, _ := os.Executable()
+	t.Setenv("FAKE_LSP", "1")
+	posted := make(chan func(), 1000)
+	m := NewManager(dir, func(fn func()) { posted <- fn })
+	m.Overrides = map[string][]string{"go": {exe}}
+	b, err := buffer.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.LanguageID = "go"
+	m.Open(b)
+	count := func() int {
+		n := 0
+		for _, fd := range m.Diagnostics(path) {
+			n += len(fd.Diagnostics)
+		}
+		return n
+	}
+	waitFor := func(want int) {
+		deadline := time.After(3 * time.Second)
+		for count() != want {
+			select {
+			case fn := <-posted:
+				fn()
+			case <-deadline:
+				t.Fatalf("diagnostics: got %d, want %d", count(), want)
+			}
+		}
+	}
+	waitFor(1)
+	b.ApplyEdits([]buffer.Edit{{Range: buffer.Range{Start: buffer.Pos{Line: 2}, End: buffer.Pos{Line: 2}}, Text: "// TODO two\n"}}, nil, "")
+	m.Flush()
+	waitFor(2)
 	m.ShutdownAll()
 }

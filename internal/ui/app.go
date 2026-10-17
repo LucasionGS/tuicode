@@ -562,6 +562,12 @@ func (a *App) tick() {
 }
 
 func (a *App) handleEvent(ev tcell.Event) {
+	// edits reach language servers right away, so their diagnostics follow typing
+	defer func() {
+		if a.lsp != nil {
+			a.lsp.Flush()
+		}
+	}()
 	switch e := ev.(type) {
 	case *tcell.EventResize:
 		a.width, a.height = e.Size()

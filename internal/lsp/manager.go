@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"tuicode/internal/buffer"
@@ -30,6 +31,10 @@ type document struct {
 	full     bool
 	listener int
 	opened   bool
+
+	// pull diagnostics (textDocument/diagnostic)
+	resultID  string
+	pullTimer *time.Timer
 }
 
 // FileDiagnostics holds diagnostics for one file along with the encoding needed to map them.
@@ -338,6 +343,14 @@ func (m *Manager) handleRequest(c *Client, method string, params json.RawMessage
 			ok = m.ApplyEdit(p.Edit)
 		}
 		return map[string]any{"applied": ok}, nil
+	case "workspace/diagnostic/refresh":
+		for _, d := range m.docs {
+			if d.client == c {
+				d.resultID = ""
+				m.schedulePull(d)
+			}
+		}
+		return nil, nil
 	case "workspace/workspaceFolders":
 		return WorkspaceFolders(m.Root, m.Folders), nil
 	case "window/showDocument":
@@ -402,6 +415,7 @@ func (m *Manager) Open(buf *buffer.Buffer) {
 			"textDocument": map[string]any{"uri": d.uri, "languageId": d.langID, "version": d.version, "text": buf.Text()},
 		})
 		d.opened = true
+		m.schedulePull(d)
 	})
 }
 
@@ -499,6 +513,71 @@ func (m *Manager) flushDoc(d *document) {
 	d.client.Notify("textDocument/didChange", map[string]any{
 		"textDocument":   map[string]any{"uri": d.uri, "version": d.version},
 		"contentChanges": changes,
+	})
+	m.schedulePull(d)
+}
+
+// schedulePull asks a pull-diagnostics server for a document's diagnostics once edits pause.
+func (m *Manager) schedulePull(d *document) {
+	if d.client == nil || d.client.Cap("diagnosticProvider") == nil {
+		return
+	}
+	if d.pullTimer != nil {
+		d.pullTimer.Stop()
+	}
+	d.pullTimer = time.AfterFunc(250*time.Millisecond, func() {
+		m.dispatch(func() { m.pull(d) })
+	})
+}
+
+func (m *Manager) dispatch(fn func()) {
+	if m.Dispatch != nil {
+		m.Dispatch(fn)
+	} else {
+		fn()
+	}
+}
+
+// pull requests textDocument/diagnostic for a document.
+func (m *Manager) pull(d *document) {
+	if m.docs[d.buf] != d || d.client == nil || !d.opened {
+		return
+	}
+	m.flushDoc(d)
+	params := map[string]any{"textDocument": map[string]any{"uri": d.uri}}
+	if d.resultID != "" {
+		params["previousResultId"] = d.resultID
+	}
+	if prov, ok := d.client.Cap("diagnosticProvider").(map[string]any); ok {
+		if id, ok := prov["identifier"].(string); ok && id != "" {
+			params["identifier"] = id
+		}
+	}
+	c := d.client
+	path := d.buf.Path
+	d.client.Call("textDocument/diagnostic", params, func(raw json.RawMessage, err error) {
+		if err != nil || m.docs[d.buf] != d {
+			return
+		}
+		var res struct {
+			Kind     string       `json:"kind"`
+			ResultID string       `json:"resultId"`
+			Items    []Diagnostic `json:"items"`
+		}
+		if json.Unmarshal(raw, &res) != nil {
+			return
+		}
+		d.resultID = res.ResultID
+		if res.Kind == "unchanged" {
+			return
+		}
+		if m.diags[path] == nil {
+			m.diags[path] = map[string]*FileDiagnostics{}
+		}
+		m.diags[path][c.Name] = &FileDiagnostics{Path: path, Diagnostics: res.Items, Encoding: c.PositionEncoding, Server: c.Name}
+		if m.OnDiagnostics != nil {
+			m.OnDiagnostics(path)
+		}
 	})
 }
 

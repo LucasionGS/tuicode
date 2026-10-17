@@ -483,6 +483,7 @@ func clientCapabilities() map[string]any {
 			"symbol":                 map[string]any{"symbolKind": map[string]any{"valueSet": symbolKinds}},
 			"executeCommand":         map[string]any{},
 			"fileOperations":         map[string]any{"willRename": true, "didRename": true},
+			"diagnostics":            map[string]any{"refreshSupport": true},
 		},
 		"window": map[string]any{
 			"workDoneProgress": true,
@@ -517,6 +518,7 @@ func clientCapabilities() map[string]any {
 			"callHierarchy":     map[string]any{},
 			"typeHierarchy":     map[string]any{},
 			"documentHighlight": map[string]any{},
+			"diagnostic":        map[string]any{"dynamicRegistration": false, "relatedDocumentSupport": false},
 			"documentSymbol": map[string]any{
 				"hierarchicalDocumentSymbolSupport": true,
 				"symbolKind":                        map[string]any{"valueSet": symbolKinds},
