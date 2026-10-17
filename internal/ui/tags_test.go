@@ -101,6 +101,18 @@ func TestSettingsJSONCompletion(t *testing.T) {
 	if got := h.text(); got != "{\n  \"editor.linkedEditing\": true\n}\n" {
 		t.Fatalf("value: %q", got)
 	}
+	// enum values are suggested inside quotes
+	h.typeText(",")
+	h.key(tcell.KeyEnter, 0, 0)
+	h.typeText(`"files.autoSa`)
+	h.key(tcell.KeyEnter, 0, 0)
+	h.key(tcell.KeyBackspace2, 0, 0) // clear the placeholder inside the quotes
+	h.a.RunCommand("editor.action.triggerSuggest", nil)
+	h.typeText("aft")
+	h.key(tcell.KeyEnter, 0, 0)
+	if got := v.buf().LineString(2); strings.TrimSpace(got) != `"files.autoSave": "afterDelay"` {
+		t.Fatalf("enum: %q", got)
+	}
 }
 
 func TestEditorGridLayout(t *testing.T) {

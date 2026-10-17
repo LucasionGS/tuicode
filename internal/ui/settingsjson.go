@@ -220,7 +220,7 @@ func (a *App) settingsCompletions(v *EditorView) ([]*citem, buffer.Pos, bool) {
 				kind:     lsp.CIKProperty,
 				detail:   val,
 				resolved: true,
-				docs:     "Default: `" + val + "`",
+				docs:     strings.TrimSpace(config.Descriptions[k] + "\n\nDefault: `" + val + "`"),
 				rng:      &r,
 			}
 			items = append(items, ci)
@@ -228,6 +228,37 @@ func (a *App) settingsCompletions(v *EditorView) ([]*citem, buffer.Pos, bool) {
 		return items, start, true
 	}
 	if ctx.inValue {
+		if opts, ok := config.Enums[ctx.key]; ok {
+			// string values are replaced including their quotes
+			start := ctx.valStart
+			end := cur
+			if ctx.valQuoted {
+				start.Col--
+				for end.Col < len(line) && line[end.Col] != '"' {
+					end.Col++
+				}
+				if end.Col < len(line) {
+					end.Col++
+				}
+			}
+			r := buffer.Range{Start: start, End: end}
+			var items []*citem
+			for _, o := range opts {
+				raw, _ := json.Marshal(o[0])
+				rr := r
+				items = append(items, &citem{
+					item:     &lsp.CompletionItem{Label: string(raw), InsertText: string(raw)},
+					label:    string(raw),
+					filter:   string(raw),
+					sortText: string(raw),
+					kind:     lsp.CIKValue,
+					docs:     o[1],
+					resolved: true,
+					rng:      &rr,
+				})
+			}
+			return items, start, true
+		}
 		if _, isBool := config.Defaults[ctx.key].(bool); isBool && !ctx.valQuoted {
 			end := cur
 			for end.Col < len(line) && isWordRune(line[end.Col]) {

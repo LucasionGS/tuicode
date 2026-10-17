@@ -424,3 +424,13 @@ func EnsureUserFiles() {
 		_ = os.WriteFile(UserKeybindingsPath(), []byte("// Place your key bindings in this file to override the defaults\n[\n]\n"), 0o644)
 	}
 }
+
+// Modified reports whether a setting is set in any file, rather than coming from the defaults.
+func (s *Settings) Modified(key string) bool {
+	for _, l := range s.layers[1:] {
+		if _, ok := l[key]; ok {
+			return true
+		}
+	}
+	return false
+}

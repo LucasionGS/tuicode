@@ -522,33 +522,6 @@ type SettingsPage struct {
 	focusList bool
 }
 
-var settingEnums = map[string][]string{
-	"editor.wordWrap":                        {"off", "on", "wordWrapColumn", "bounded"},
-	"editor.lineNumbers":                     {"on", "off", "relative"},
-	"editor.renderWhitespace":                {"none", "boundary", "selection", "trailing", "all"},
-	"editor.cursorStyle":                     {"line", "block", "underline"},
-	"editor.cursorBlinking":                  {"blink", "solid"},
-	"editor.autoClosingBrackets":             {"always", "languageDefined", "beforeWhitespace", "never"},
-	"editor.renderLineHighlight":             {"none", "gutter", "line", "all"},
-	"editor.showFoldingControls":             {"always", "never", "mouseover"},
-	"editor.acceptSuggestionOnEnter":         {"on", "smart", "off"},
-	"editor.wordBasedSuggestions":            {"off", "currentDocument", "matchingDocuments", "allDocuments"},
-	"editor.inlayHints.enabled":              {"on", "onUnlessPressed", "offUnlessPressed", "off"},
-	"editor.occurrencesHighlight":            {"off", "singleFile", "multiFile"},
-	"editor.matchBrackets":                   {"never", "near", "always"},
-	"editor.multiCursorModifier":             {"ctrlCmd", "alt"},
-	"files.autoSave":                         {"off", "afterDelay", "onFocusChange", "onWindowChange"},
-	"files.eol":                              {"\n", "\r\n", "auto"},
-	"workbench.startupEditor":                {"none", "welcomePage", "newUntitledFile"},
-	"workbench.editor.showTabs":              {"multiple", "single", "none"},
-	"workbench.activityBar.location":         {"default", "top", "bottom", "hidden"},
-	"window.menuBarVisibility":               {"classic", "visible", "toggle", "hidden", "compact"},
-	"tuicode.icons":                          {"auto", "nerd", "unicode"},
-	"terminal.integrated.cursorStyle":        {"block", "line", "underline"},
-	"terminal.integrated.rightClickBehavior": {"default", "copyPaste", "paste", "selectWord", "nothing"},
-	"workbench.tree.renderIndentGuides":      {"none", "onHover", "always"},
-}
-
 func (a *App) openSettingsUI() {
 	p := &SettingsPage{app: a}
 	p.search = newTextInput(a, "Search settings")
@@ -569,7 +542,10 @@ func (p *SettingsPage) filter() {
 	q := strings.ToLower(p.search.Text())
 	var keys []string
 	for k := range config.Defaults {
-		if q == "" || strings.Contains(strings.ToLower(k), q) {
+		if strings.HasPrefix(k, "[") {
+			continue
+		}
+		if q == "" || strings.Contains(strings.ToLower(k), q) || strings.Contains(strings.ToLower(config.Descriptions[k]), q) {
 			keys = append(keys, k)
 		}
 	}
@@ -633,11 +609,15 @@ func (p *SettingsPage) edit(key string) {
 		})
 		return
 	}
-	if opts, ok := settingEnums[key]; ok {
+	if opts, ok := config.Enums[key]; ok {
 		var items []QuickItem
 		for _, o := range opts {
-			label := strings.ReplaceAll(strings.ReplaceAll(o, "\r", "\\r"), "\n", "\\n")
-			items = append(items, QuickItem{Label: label, Data: o})
+			label := strings.ReplaceAll(strings.ReplaceAll(o[0], "\r", "\\r"), "\n", "\\n")
+			it := QuickItem{Label: label, Description: o[1], Data: o[0]}
+			if fmt.Sprint(cur) == o[0] {
+				it.Label = a.Icon(IcoCheck) + " " + it.Label
+			}
+			items = append(items, it)
 		}
 		a.openQuick(&QuickPick{Title: key, Items: items, KeepOrder: true, OnAccept: func(it *QuickItem, q string) {
 			if it != nil {
@@ -694,7 +674,7 @@ func (p *SettingsPage) HandleKey(key, text string, isText bool) bool {
 		}
 		return false
 	}
-	h := max((p.app.rEditor.H-5)/3, 1)
+	h := max((p.app.rEditor.H-5)/5, 1)
 	if p.selected < p.scroll {
 		p.scroll = p.selected
 	}
@@ -728,7 +708,8 @@ func (p *SettingsPage) Draw(r Rect) {
 	})
 	a.cv.Text(r.X+2, r.Y+2, lx, fmt.Sprintf("User  ·  %d settings", len(p.keys)), styleFB(th.C("descriptionForeground"), bgc))
 	y := r.Y + 4
-	h := (r.Y + r.H - y) / 3
+	const itemH = 5 // title, two description lines, value, gap
+	h := (r.Y + r.H - y) / itemH
 	p.selected = clampInt(p.selected, 0, max(len(p.keys)-1, 0))
 	p.scroll = clampInt(p.scroll, 0, max(len(p.keys)-h, 0))
 	for i := 0; i < h; i++ {
@@ -738,18 +719,30 @@ func (p *SettingsPage) Draw(r Rect) {
 		}
 		key := p.keys[idx]
 		cat, name := settingLabel(key)
-		ry := y + i*3
+		ry := y + i*itemH
 		sel := idx == p.selected && p.focusList
 		rbg := bgc
 		if sel {
 			rbg = th.OverColor("list.hoverBackground", bgc)
-			a.cv.Fill(Rect{r.X + 1, ry, r.W - 2, 2}, ' ', styleFB(th.C("editor.foreground"), rbg))
-			a.cv.Set(r.X+1, ry, '▎', styleFB(th.C("focusBorder"), rbg))
-			a.cv.Set(r.X+1, ry+1, '▎', styleFB(th.C("focusBorder"), rbg))
+			a.cv.Fill(Rect{r.X + 1, ry, r.W - 2, itemH - 1}, ' ', styleFB(th.C("editor.foreground"), rbg))
+			for k := 0; k < itemH-1; k++ {
+				a.cv.Set(r.X+1, ry+k, '▎', styleFB(th.C("focusBorder"), rbg))
+			}
+		}
+		if a.settings.Modified(key) {
+			// like VS Code's modified indicator
+			for k := 0; k < itemH-1; k++ {
+				a.cv.Set(r.X+2, ry+k, '▏', styleFB(th.C("settings.modifiedItemIndicator"), rbg))
+			}
 		}
 		st := base.Background(rbg)
 		x := a.cv.Text(r.X+3, ry, r.X+r.W, cat+": ", st.Foreground(th.C("descriptionForeground")))
 		a.cv.Text(x, ry, r.X+r.W, name, st.Bold(true).Foreground(th.C("settings.headerForeground")))
+		desc := strings.ReplaceAll(config.Descriptions[key], "`", "")
+		for li, dl := range wrapWords(desc, min(r.W-6, 110), 2) {
+			a.cv.Text(r.X+3, ry+1+li, r.X+r.W-2, dl, st.Foreground(th.C("descriptionForeground")))
+		}
+		ry += 2 // the value sits under the description
 		val := a.settings.Get(key, "")
 		var vs string
 		switch v := val.(type) {
@@ -760,18 +753,30 @@ func (p *SettingsPage) Draw(r Rect) {
 				vs = a.checkbox(false) + " disabled"
 			}
 		case string:
-			vs = fmt.Sprintf("%q", v)
+			vs = v
+			if _, isEnum := config.Enums[key]; isEnum {
+				// dropdowns show the value and a chevron, like VS Code
+				label := strings.NewReplacer("\r", "\\r", "\n", "\\n").Replace(v)
+				vs = label + strings.Repeat(" ", max(18-StrWidth(label), 1)) + a.Icon(IcoChevronDown)
+			} else {
+				vs += strings.Repeat(" ", max(40-StrWidth(v), 0))
+			}
+		case float64:
+			vs = fmt.Sprint(v) + strings.Repeat(" ", max(12-len(fmt.Sprint(v)), 0))
 		case nil:
 			vs = "null"
 		default:
 			b, _ := json.Marshal(v)
-			vs = string(b)
+			vs = "Edit in settings.json: " + string(b)
 		}
 		vst := styleFB(th.C("dropdown.foreground"), th.C("dropdown.background"))
+		if _, isStr := val.(string); isStr && config.Enums[key] == nil {
+			vst = styleFB(th.C("input.foreground"), th.C("input.background"))
+		}
 		a.cv.TextEllipsis(r.X+3, ry+1, min(r.W-6, 70), " "+vs+" ", vst)
 		k := key
 		rowIdx := idx
-		a.addHit(Rect{r.X, ry, r.W, 2}, func(ev MouseEvent) bool {
+		a.addHit(Rect{r.X, ry - 2, r.W, itemH - 1}, func(ev MouseEvent) bool {
 			switch ev.Kind {
 			case MousePress:
 				p.focusList = true
@@ -794,6 +799,40 @@ func (p *SettingsPage) Draw(r Rect) {
 }
 
 //#endregion
+
+// wrapWords wraps text to width, returning at most max lines (the last one ends with … when cut).
+func wrapWords(text string, width, maxLines int) []string {
+	if width < 10 || text == "" {
+		return nil
+	}
+	var lines []string
+	cur := ""
+	words := strings.Fields(text)
+	for i, w := range words {
+		if cur != "" && StrWidth(cur)+1+StrWidth(w) > width {
+			lines = append(lines, cur)
+			cur = ""
+			if len(lines) == maxLines {
+				last := lines[maxLines-1]
+				if i < len(words) {
+					for StrWidth(last)+1 > width {
+						last = string([]rune(last)[:len([]rune(last))-1])
+					}
+					lines[maxLines-1] = last + "…"
+				}
+				return lines
+			}
+		}
+		if cur != "" {
+			cur += " "
+		}
+		cur += w
+	}
+	if cur != "" {
+		lines = append(lines, cur)
+	}
+	return lines
+}
 
 //#region Markdown preview
 
