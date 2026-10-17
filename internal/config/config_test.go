@@ -37,3 +37,16 @@ func TestWhen(t *testing.T) {
 		t.Error("strip")
 	}
 }
+
+func TestLanguageOverridePrecedence(t *testing.T) {
+	s := &Settings{layers: []map[string]any{
+		{"editor.tabSize": 4.0, "[go]": map[string]any{"editor.tabSize": 8.0}},
+		{"editor.tabSize": 2.0},
+	}}
+	if got := s.Int("editor.tabSize", "go", 0); got != 8 {
+		t.Fatalf("language default should win over a user value: %d", got)
+	}
+	if got := s.Int("editor.tabSize", "python", 0); got != 2 {
+		t.Fatalf("user value should apply to other languages: %d", got)
+	}
+}

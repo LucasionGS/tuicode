@@ -236,31 +236,30 @@ func LoadSettings(workspace string) *Settings {
 	return s
 }
 
-// Get returns the effective value of a setting, honoring "[lang]" overrides.
+// Get returns the effective value of a setting. Like VS Code, a language-specific
+// value ("[go]": {...}) from any layer wins over a plain value, then later layers win.
 func (s *Settings) Get(key string, lang string) any {
-	var val any
-	found := false
-	for _, l := range s.layers {
-		if v, ok := l[key]; ok {
-			val, found = v, true
-		}
-		if lang != "" {
-			if ov, ok := l["["+lang+"]"].(map[string]any); ok {
+	if lang != "" {
+		for i := len(s.layers) - 1; i >= 0; i-- {
+			if ov, ok := s.layers[i]["["+lang+"]"].(map[string]any); ok {
 				if v, ok := ov[key]; ok {
-					val, found = v, true
+					return v
 				}
 			}
 		}
 	}
-	if !found {
-		// nested object form, e.g. "editor": {"tabSize": 2}
-		if i := strings.LastIndex(key, "."); i > 0 {
-			if parent, ok := s.Get(key[:i], lang).(map[string]any); ok {
-				return parent[key[i+1:]]
-			}
+	for i := len(s.layers) - 1; i >= 0; i-- {
+		if v, ok := s.layers[i][key]; ok {
+			return v
 		}
 	}
-	return val
+	// nested object form, e.g. "editor": {"tabSize": 2}
+	if i := strings.LastIndex(key, "."); i > 0 {
+		if parent, ok := s.Get(key[:i], lang).(map[string]any); ok {
+			return parent[key[i+1:]]
+		}
+	}
+	return nil
 }
 
 // Bool returns a boolean setting.
