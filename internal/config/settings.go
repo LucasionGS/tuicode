@@ -58,6 +58,7 @@ var Defaults = map[string]any{
 	"editor.cursorBlinking":                                   "blink",
 	"editor.autoClosingBrackets":                              "languageDefined",
 	"editor.linkedEditing":                                    false,
+	"remote.autoForwardPorts":                                 true,
 	"editor.codeLens":                                         true,
 	"json.validate.enable":                                    true,
 	"json.format.enable":                                      true,

@@ -136,6 +136,7 @@ var Descriptions = map[string]string{
 	"git.blame.statusBarItem.template":    "Template for the blame information status bar item. Supported variables: `${hash}`, `${hashShort}`, `${subject}`, `${authorName}`, `${authorEmail}`, `${authorDate}`, `${authorDateAgo}`.",
 	"scm.diffDecorations":                 "Controls diff decorations in the editor.",
 	"problems.decorations.enabled":        "Show Errors & Warnings on files and folder.",
+	"remote.autoForwardPorts":             "When enabled, new running processes are detected and ports that they listen on are shown in the Ports view with a notification.",
 	// Debug
 	"debug.inlineValues": "Show variable values inline in editor while debugging.",
 	// Terminal

@@ -870,7 +870,7 @@ func (a *App) drawPanel() {
 	case "debug":
 		a.drawDebugConsole(body)
 	case "ports":
-		a.cv.Text(body.X+2, body.Y+1, body.X+body.W, "No forwarded ports.", styleFB(th.C("descriptionForeground"), bgc))
+		a.ports.draw(body)
 	}
 }
 
@@ -924,6 +924,8 @@ func (a *App) panelHandleKey(key, text string, isText bool) bool {
 		return a.problems.handleKey(key)
 	case "output":
 		return a.output.handleKey(key)
+	case "ports":
+		return a.ports.handleKey(key)
 	}
 	return false
 }

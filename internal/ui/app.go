@@ -135,6 +135,7 @@ type App struct {
 	scm       *SCMView
 	outline   *OutlineView
 	hierView  *HierarchyView
+	ports     *PortsView
 	extView   *ExtensionsView
 	terminals *TerminalPanel
 	problems  *ProblemsPanel
@@ -279,6 +280,7 @@ func New(opts Options) (*App, error) {
 	a.scm = newSCMView(a)
 	a.outline = newOutlineView(a)
 	a.hierView = newHierarchyView(a)
+	a.ports = newPortsView(a)
 	a.extView = newExtensionsView(a)
 	a.terminals = newTerminalPanel(a)
 	a.problems = newProblemsPanel(a)
@@ -558,6 +560,9 @@ func (a *App) tick() {
 	}
 	if a.tickCount%4 == 0 {
 		a.explorer.refreshIfChanged()
+	}
+	if a.tickCount%4 == 2 {
+		a.ports.refresh()
 	}
 }
 

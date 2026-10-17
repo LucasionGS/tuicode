@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -161,4 +162,25 @@ func TestShellIntegration(t *testing.T) {
 		t.Fatal("sticky command missing")
 	}
 	h.a.terminals.closeAll()
+}
+
+func TestDetectPorts(t *testing.T) {
+	py, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 not installed")
+	}
+	cmd := exec.Command(py, "-c", "import socket,time;s=socket.socket();s.bind(('127.0.0.1',0));s.listen();print(s.getsockname()[1],flush=True);time.sleep(20)")
+	out, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer cmd.Process.Kill()
+	var port int
+	if _, err := fmt.Fscan(out, &port); err != nil {
+		t.Fatal(err)
+	}
+	ports := detectPorts([]int{cmd.Process.Pid})
+	if len(ports) != 1 || ports[0].port != port || ports[0].process != "python3" {
+		t.Fatalf("ports: %+v, want %d", ports, port)
+	}
 }
