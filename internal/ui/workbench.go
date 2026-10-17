@@ -592,6 +592,8 @@ func (a *App) drawSidebar() {
 		title = "LANGUAGE SERVERS"
 	case "debug":
 		title = "RUN AND DEBUG"
+	case "hierarchy":
+		title = a.hierView.title()
 	}
 	tst := styleFB(th.C("sideBarTitle.foreground"), bgc)
 	a.cv.Text(r.X+2, r.Y, r.X+r.W-1, title, tst)
@@ -612,6 +614,9 @@ func (a *App) drawSidebar() {
 		a.extView.draw(body)
 	case "debug":
 		a.debugView.draw(body)
+	case "hierarchy":
+		a.hierView.drawActions(Rect{r.X, r.Y, r.W - 1, 1})
+		a.hierView.draw(body)
 	}
 	a.cv.clip = r
 	// sash on the right edge
@@ -658,6 +663,8 @@ func (a *App) sidebarHandleKey(key, text string, isText bool) bool {
 		return a.extView.handleKey(key, text, isText)
 	case "debug":
 		return a.debugView.handleKey(key, text, isText)
+	case "hierarchy":
+		return a.hierView.handleKey(key, text, isText)
 	}
 	return false
 }

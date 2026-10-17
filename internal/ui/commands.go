@@ -318,6 +318,7 @@ func (a *App) registerCommands() {
 	a.cmd("expandLineSelection", "Selection", "Expand Line Selection", a.move(func(v *EditorView) { v.ExpandLineSelection() }))
 	a.cmd("editor.action.smartSelect.expand", "Selection", "Expand Selection", a.move(func(v *EditorView) { v.ExpandSelection() }))
 	a.cmd("editor.action.smartSelect.shrink", "Selection", "Shrink Selection", a.move(func(v *EditorView) { v.ShrinkSelection() }))
+	a.cmd("editor.action.addSelectionToPreviousFindMatch", "Selection", "Add Previous Occurrence", a.move(func(v *EditorView) { v.AddPreviousOccurrence() }))
 	a.cmd("editor.action.addSelectionToNextFindMatch", "Selection", "Add Next Occurrence", a.move(func(v *EditorView) { v.AddNextOccurrence(false) }))
 	a.cmd("editor.action.moveSelectionToNextFindMatch", "Selection", "Move Last Selection to Next Find Match", a.move(func(v *EditorView) { v.AddNextOccurrence(true) }))
 	a.cmd("editor.action.selectHighlights", "Selection", "Select All Occurrences", a.move(func(v *EditorView) { v.SelectAllOccurrences() }))
@@ -506,6 +507,14 @@ func (a *App) registerCommands() {
 	a.cmd("workbench.action.zoomIn", "View", "Zoom In", func(any) { a.setStatusMessage("Use your terminal's zoom (e.g. Ctrl+Shift+=) to change the font size.") })
 	a.alias("workbench.action.zoomOut", "workbench.action.zoomIn")
 	a.cmd("workbench.action.editor.changeLanguageMode", "", "Change Language Mode", func(any) { a.pickLanguage() })
+	a.cmd("workbench.action.toggleAutoSave", "File", "Toggle Auto Save", func(any) { a.toggleAutoSave() })
+	a.cmd("workbench.action.files.toggleActiveEditorReadonlyInSession", "File", "Toggle Active Editor Read-only in Session", a.ed(func(v *EditorView) { v.buf().ReadOnly = !v.buf().ReadOnly }))
+	a.cmd("workbench.action.files.setActiveEditorReadonlyInSession", "File", "Set Active Editor Read-only in Session", a.ed(func(v *EditorView) { v.buf().ReadOnly = true }))
+	a.cmd("workbench.action.files.setActiveEditorWriteableInSession", "File", "Set Active Editor Writeable in Session", a.ed(func(v *EditorView) { v.buf().ReadOnly = false }))
+	a.cmd("workbench.panel.markers.view.focus", "View", "Focus on Problems View", func(any) { a.showPanel("problems") })
+	a.alias("workbench.action.problems.focus", "workbench.panel.markers.view.focus")
+	a.cmd("editor.action.wordHighlight.next", "", "Go to Next Symbol Highlight", a.move(func(v *EditorView) { v.jumpHighlight(1) }))
+	a.cmd("editor.action.wordHighlight.prev", "", "Go to Previous Symbol Highlight", a.move(func(v *EditorView) { v.jumpHighlight(-1) }))
 	a.cmd("workbench.action.editor.changeEOL", "", "Change End of Line Sequence", func(any) { a.pickEOL() })
 	a.cmd("workbench.action.editor.changeEncoding", "", "Change File Encoding", func(any) {
 		a.openQuick(&QuickPick{Placeholder: "Select Action", Items: []QuickItem{{Label: "Reopen with Encoding", Description: "UTF-8"}, {Label: "Save with Encoding", Description: "UTF-8"}},
@@ -568,6 +577,22 @@ func (a *App) registerCommands() {
 		l := lvl
 		a.cmd(fmt.Sprintf("editor.foldLevel%d", l), "", fmt.Sprintf("Fold Level %d", l), a.ed(func(v *EditorView) { v.FoldAll(l) }))
 	}
+	a.cmd("editor.foldAllMarkerRegions", "", "Fold All Regions", a.ed(func(v *EditorView) {
+		for line := 0; line < v.buf().LineCount(); line++ {
+			if f, ok := v.regionRangeAt(line); ok {
+				v.addFold(f)
+			}
+		}
+	}))
+	a.cmd("editor.unfoldAllMarkerRegions", "", "Unfold All Regions", a.ed(func(v *EditorView) {
+		out := v.folds[:0]
+		for _, f := range v.folds {
+			if !regionStartRe.MatchString(v.buf().LineString(f.Start)) {
+				out = append(out, f)
+			}
+		}
+		v.folds = out
+	}))
 	a.cmd("editor.foldAllBlockComments", "", "Fold All Block Comments", a.ed(func(v *EditorView) {
 		for line := 0; line < v.buf().LineCount(); line++ {
 			if strings.HasPrefix(strings.TrimSpace(v.buf().LineString(line)), "/*") {
@@ -595,6 +620,16 @@ func (a *App) registerCommands() {
 	a.cmd("editor.action.goToImplementation", "", "Go to Implementations", a.ed(func(v *EditorView) { a.gotoLocations(v, "textDocument/implementation", "implementation") }))
 	a.cmd("editor.action.goToReferences", "", "Go to References", a.ed(func(v *EditorView) { a.peekReferences(v) }))
 	a.alias("editor.action.referenceSearch.trigger", "editor.action.goToReferences")
+	a.cmd("references-view.showCallHierarchy", "", "Calls: Show Call Hierarchy", a.ed(func(v *EditorView) { a.showHierarchy(v, "incoming") }))
+	a.alias("editor.showCallHierarchy", "references-view.showCallHierarchy")
+	a.cmd("references-view.showIncomingCalls", "", "Calls: Show Incoming Calls", a.ed(func(v *EditorView) { a.showHierarchy(v, "incoming") }))
+	a.alias("editor.showIncomingCalls", "references-view.showIncomingCalls")
+	a.cmd("references-view.showOutgoingCalls", "", "Calls: Show Outgoing Calls", a.ed(func(v *EditorView) { a.showHierarchy(v, "outgoing") }))
+	a.alias("editor.showOutgoingCalls", "references-view.showOutgoingCalls")
+	a.cmd("references-view.showTypeHierarchy", "", "Types: Show Type Hierarchy", a.ed(func(v *EditorView) { a.showHierarchy(v, "supertypes") }))
+	a.alias("editor.showTypeHierarchy", "references-view.showTypeHierarchy")
+	a.cmd("references-view.showSupertypes", "", "Types: Show Supertypes", a.ed(func(v *EditorView) { a.showHierarchy(v, "supertypes") }))
+	a.cmd("references-view.showSubtypes", "", "Types: Show Subtypes", a.ed(func(v *EditorView) { a.showHierarchy(v, "subtypes") }))
 	a.cmd("references-view.findReferences", "", "Find All References", a.ed(func(v *EditorView) { a.findAllReferences(v) }))
 	a.cmd("editor.action.rename", "", "Rename Symbol", a.ed(func(v *EditorView) { a.startRename(v) }))
 	a.cmd("editor.action.quickFix", "", "Quick Fix...", a.ed(func(v *EditorView) { a.showCodeActions(v, "") }))

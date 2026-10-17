@@ -504,6 +504,8 @@ func (a *App) showEditorContextMenu(v *EditorView, x, y int) {
 		}},
 		{Separator: true},
 		{Label: "Find All References", Command: "references-view.findReferences"},
+		{Label: "Show Call Hierarchy", Command: "references-view.showCallHierarchy"},
+		{Label: "Show Type Hierarchy", Command: "references-view.showTypeHierarchy"},
 		{Separator: true},
 		{Label: "Rename Symbol", Command: "editor.action.rename"},
 		{Label: "Change All Occurrences", Command: "editor.action.changeAll"},
@@ -516,6 +518,14 @@ func (a *App) showEditorContextMenu(v *EditorView, x, y int) {
 		{Label: "Paste", Command: "editor.action.clipboardPasteAction"},
 		{Separator: true},
 		{Label: "Command Palette...", Command: "workbench.action.showCommands"},
+	}
+	if a.debug != nil && a.debug.state == "stopped" {
+		items = append([]MenuItem{
+			{Label: "Run to Cursor", Command: "editor.debug.action.runToCursor"},
+			{Label: "Evaluate in Debug Console", Command: "editor.debug.action.selectionToRepl"},
+			{Label: "Add to Watch", Command: "editor.debug.action.selectionToWatch"},
+			{Separator: true},
+		}, items...)
 	}
 	a.openContextMenu(x, y, items)
 }

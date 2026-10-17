@@ -1114,6 +1114,83 @@ func (v *EditorView) AddNextOccurrence(moveLast bool) {
 	v.ensurePosVisible(r.End, false)
 }
 
+// AddPreviousOccurrence selects the previous match of the primary selection, like Ctrl+D backwards.
+func (v *EditorView) AddPreviousOccurrence() {
+	p := v.Primary()
+	if p.Empty() {
+		v.AddNextOccurrence(false)
+		return
+	}
+	text := v.buf().TextRange(p.Range())
+	matches := v.findAll(text, v.app.wholeWordNext, true)
+	if len(matches) == 0 {
+		return
+	}
+	first := v.sels[0].Range().Start
+	r := matches[len(matches)-1]
+	for i := len(matches) - 1; i >= 0; i-- {
+		if matches[i].End.Less(first) || matches[i].End == first {
+			r = matches[i]
+			break
+		}
+	}
+	for _, s := range v.sels {
+		if s.Range() == r {
+			return
+		}
+	}
+	v.pushCursorHistory()
+	v.sels = append(v.sels, buffer.Selection{Anchor: r.Start, Active: r.End})
+	v.prefX = append(v.prefX, -1)
+	v.normalize()
+	for i, s := range v.sels {
+		if s.Range() == r {
+			v.primary = i
+		}
+	}
+	v.ensurePosVisible(r.Start, false)
+}
+
+// jumpHighlight moves the cursor to the next or previous document highlight of the symbol under it.
+func (v *EditorView) jumpHighlight(dir int) {
+	hs := append([]buffer.Range{}, v.highlights...)
+	if len(hs) == 0 {
+		return
+	}
+	sort.Slice(hs, func(i, j int) bool { return hs[i].Start.Less(hs[j].Start) })
+	cur := v.Cursor()
+	idx := -1
+	for i, h := range hs {
+		if !cur.Less(h.Start) && !h.End.Less(cur) {
+			idx = i
+			break
+		}
+	}
+	var next buffer.Range
+	switch {
+	case idx >= 0:
+		next = hs[(idx+dir+len(hs))%len(hs)]
+	case dir > 0:
+		next = hs[0]
+		for _, h := range hs {
+			if cur.Less(h.Start) {
+				next = h
+				break
+			}
+		}
+	default:
+		next = hs[len(hs)-1]
+		for i := len(hs) - 1; i >= 0; i-- {
+			if hs[i].Start.Less(cur) {
+				next = hs[i]
+				break
+			}
+		}
+	}
+	v.SetSelections([]buffer.Selection{{Anchor: next.Start, Active: next.End}}, 0)
+	v.ensurePosVisible(next.Start, true)
+}
+
 // findNext finds text after from (wrapping).
 func (v *EditorView) findNext(text string, from buffer.Pos, wholeWord, caseSensitive bool) (buffer.Range, bool) {
 	matches := v.findAll(text, wholeWord, caseSensitive)

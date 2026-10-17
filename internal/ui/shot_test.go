@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -262,4 +263,43 @@ func TestScreenshotGrid(t *testing.T) {
 	h.a.OpenFile(filepath.Join(root, "internal/ui/tags.go"), false)
 	h.settle()
 	h.snapshot(filepath.Join(out, "grid.json"))
+}
+
+func TestScreenshotCallHierarchy(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT and TUI_LSP")
+	}
+	wd, _ := os.Getwd()
+	root := filepath.Dir(filepath.Dir(wd))
+	_ = os.Chdir(root)
+	defer os.Chdir(wd)
+	h := newHarness(t, 150, 42, Options{Paths: []string{filepath.Join(root, "internal/ui/grouplayout.go")}})
+	for i := 0; i < 80; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+		if v := h.a.ActiveView(); v != nil && v.doc.semSpans != nil {
+			break
+		}
+	}
+	v := h.a.ActiveView()
+	// on insertGroup
+	for l := 0; l < v.buf().LineCount(); l++ {
+		if strings.HasPrefix(v.buf().LineString(l), "func (a *App) insertGroup") {
+			v.SetCursor(buffer.Pos{Line: l, Col: 16})
+		}
+	}
+	h.a.RunCommand("references-view.showCallHierarchy", nil)
+	for i := 0; i < 50 && (h.a.sidebarView != "hierarchy" || len(h.a.hierView.rows) < 2); i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.a.hierView.handleKey("down", "", false)
+	h.a.hierView.handleKey("right", "", false)
+	h.settle()
+	h.snapshot(filepath.Join(out, "calls.json"))
+	if len(h.a.hierView.rows) < 3 {
+		t.Errorf("rows: %d", len(h.a.hierView.rows))
+	}
+	h.a.lsp.ShutdownAll()
 }

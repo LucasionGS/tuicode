@@ -502,6 +502,8 @@ func clientCapabilities() map[string]any {
 			"typeDefinition":    map[string]any{"linkSupport": true},
 			"implementation":    map[string]any{"linkSupport": true},
 			"references":        map[string]any{},
+			"callHierarchy":     map[string]any{},
+			"typeHierarchy":     map[string]any{},
 			"documentHighlight": map[string]any{},
 			"documentSymbol": map[string]any{
 				"hierarchicalDocumentSymbolSupport": true,

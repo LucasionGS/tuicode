@@ -324,6 +324,7 @@ func firstLine(s string) string {
 
 func (a *App) registerGitCommands() {
 	a.cmd("git.commit", "Git", "Commit", func(any) { a.gitCommit(false) })
+	a.alias("git.commitStaged", "git.commit")
 	a.cmd("git.commitAmend", "Git", "Commit (Amend)", func(any) { a.gitCommit(true) })
 	a.cmd("git.commitAll", "Git", "Commit All", func(any) {
 		a.gitRun(func() error { return git.Stage(a.gitRoot, ".") })

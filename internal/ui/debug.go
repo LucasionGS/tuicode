@@ -24,6 +24,7 @@ type Breakpoint struct {
 	Verified  bool
 	Message   string
 	Disabled  bool
+	Temp      bool // added by Run to Cursor, removed on the next stop
 }
 
 type dapThread struct {
@@ -112,7 +113,7 @@ func (a *App) toggleBreakpoint(path string, line int) {
 	}
 	list := a.breakpoints[path]
 	for i, bp := range list {
-		if bp.Line == line {
+		if bp.Line == line && !bp.Temp {
 			a.breakpoints[path] = append(list[:i], list[i+1:]...)
 			a.syncBreakpoints(path)
 			return
@@ -125,11 +126,45 @@ func (a *App) toggleBreakpoint(path string, line int) {
 
 func (a *App) breakpointAt(path string, line int) *Breakpoint {
 	for _, bp := range a.breakpoints[path] {
-		if bp.Line == line {
+		if bp.Line == line && !bp.Temp {
 			return bp
 		}
 	}
 	return nil
+}
+
+// runToCursor continues to the cursor line using a temporary breakpoint.
+func (a *App) runToCursor(v *EditorView) {
+	s := a.debug
+	path := v.buf().Path
+	if s == nil || s.c == nil || s.state != "stopped" || path == "" {
+		return
+	}
+	line := v.Cursor().Line
+	if a.breakpointAt(path, line) == nil {
+		a.breakpoints[path] = append(a.breakpoints[path], &Breakpoint{Line: line, Temp: true})
+		sort.Slice(a.breakpoints[path], func(i, j int) bool { return a.breakpoints[path][i].Line < a.breakpoints[path][j].Line })
+	}
+	s.setBreakpoints(path, func() { s.cont() })
+}
+
+// clearTempBreakpoints removes Run to Cursor breakpoints once the debuggee stops.
+func (a *App) clearTempBreakpoints() {
+	for path, list := range a.breakpoints {
+		out := list[:0]
+		changed := false
+		for _, bp := range list {
+			if bp.Temp {
+				changed = true
+				continue
+			}
+			out = append(out, bp)
+		}
+		a.breakpoints[path] = out
+		if changed {
+			a.syncBreakpoints(path)
+		}
+	}
 }
 
 // shiftBreakpoints keeps breakpoints on their lines while editing.
@@ -516,6 +551,7 @@ func (s *DebugSession) onEvent(ev dap.Event) {
 		_ = json.Unmarshal(ev.Body, &b)
 		s.state = "stopped"
 		s.stopReason = b.Reason
+		a.clearTempBreakpoints()
 		if b.ThreadID != 0 {
 			s.threadID = b.ThreadID
 		}
@@ -885,6 +921,9 @@ func (d *DebugView) rebuild() {
 	sort.Strings(paths)
 	for _, p := range paths {
 		for _, bp := range a.breakpoints[p] {
+			if bp.Temp {
+				continue
+			}
 			d.rows = append(d.rows, debugRow{kind: "bp", label: filepath.Base(p), path: p, line: bp.Line})
 		}
 	}
@@ -1289,6 +1328,7 @@ func (a *App) registerDebugCommands() {
 		a.lastLaunch = ""
 		a.startDebugging(false)
 	})
+	a.cmd("editor.debug.action.runToCursor", "Debug", "Run to Cursor", a.ed(func(v *EditorView) { a.runToCursor(v) }))
 	a.cmd("editor.debug.action.toggleBreakpoint", "Debug", "Toggle Breakpoint", a.ed(func(v *EditorView) {
 		a.toggleBreakpoint(v.buf().Path, v.Cursor().Line)
 	}))
@@ -1344,6 +1384,25 @@ func (a *App) registerDebugCommands() {
 		if expr != "" {
 			a.addWatch(expr)
 		}
+	}))
+	a.cmd("editor.debug.action.selectionToRepl", "Debug", "Evaluate in Debug Console", a.ed(func(v *EditorView) {
+		expr := v.SelectedText()
+		if expr == "" {
+			expr = strings.TrimSpace(v.buf().LineString(v.Cursor().Line))
+		}
+		if expr == "" || a.debug == nil || a.debug.state == "terminated" {
+			return
+		}
+		a.panelVisible = true
+		a.panelView = "debug"
+		a.consoleAppend("input", "> "+expr)
+		a.debug.evaluate(expr, "repl", func(res string, err error) {
+			if err != nil {
+				a.consoleAppend("stderr", err.Error())
+				return
+			}
+			a.consoleAppend("result", res)
+		})
 	}))
 	a.cmd("workbench.debug.action.focusRepl", "Debug", "Focus on Debug Console View", func(any) { a.showPanel("debug") })
 	a.cmd("workbench.view.debug", "View", "Show Run and Debug", func(any) { a.toggleSidebarView("debug") })

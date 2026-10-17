@@ -130,6 +130,7 @@ type App struct {
 	searchV   *SearchView
 	scm       *SCMView
 	outline   *OutlineView
+	hierView  *HierarchyView
 	extView   *ExtensionsView
 	terminals *TerminalPanel
 	problems  *ProblemsPanel
@@ -266,6 +267,7 @@ func New(opts Options) (*App, error) {
 	a.searchV = newSearchView(a)
 	a.scm = newSCMView(a)
 	a.outline = newOutlineView(a)
+	a.hierView = newHierarchyView(a)
 	a.extView = newExtensionsView(a)
 	a.terminals = newTerminalPanel(a)
 	a.problems = newProblemsPanel(a)
