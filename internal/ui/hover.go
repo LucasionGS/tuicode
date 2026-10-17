@@ -226,8 +226,11 @@ func parseInline(s string) []mdSeg {
 				close := strings.IndexRune(string(rs[i+end:]), ')')
 				if close > 0 {
 					flush()
-					text := string(rs[i+1 : i+end])
-					segs = append(segs, mdSeg{text: text, link: true})
+					// link text can hold inline code, like "[`fmt.Println` on pkg.go.dev](...)"
+					for _, sub := range parseInline(string(rs[i+1 : i+end])) {
+						sub.link = true
+						segs = append(segs, sub)
+					}
 					i = i + end + close
 					continue
 				}
