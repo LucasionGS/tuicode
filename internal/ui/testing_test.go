@@ -14,8 +14,14 @@ func TestGoTesting(t *testing.T) {
 		t.Skip("go not installed")
 	}
 	src := "package calc\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tif 1+1 != 2 {\n\t\tt.Fatal(\"math is broken\")\n\t}\n}\n\nfunc TestBroken(t *testing.T) {\n\tt.Errorf(\"want %d, got %d\", 3, 4)\n}\n\nfunc helper() {}\n"
+	// reuse the real build cache (go env reads it from the real home) so the test compiles fast
+	cache, _ := exec.Command("go", "env", "GOCACHE").Output()
 	dir := tempWorkspace(t, map[string]string{"go.mod": "module calc\n\ngo 1.21\n", "calc_test.go": src})
-	t.Setenv("GOCACHE", t.TempDir())
+	if c := strings.TrimSpace(string(cache)); c != "" {
+		t.Setenv("GOCACHE", c)
+	} else {
+		t.Setenv("GOCACHE", t.TempDir())
+	}
 	t.Setenv("GOFLAGS", "-mod=mod")
 	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "calc_test.go")}})
 	v := h.a.ActiveView()
