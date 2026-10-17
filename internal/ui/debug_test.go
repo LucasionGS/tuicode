@@ -47,6 +47,7 @@ func TestDebugGo(t *testing.T) {
 		t.Fatalf("stopped at line %d", l)
 	}
 	wait(func() bool { return h.contains("x: 41") }, "variables")
+	wait(func() bool { return h.contains("x := 41 x = 41") }, "inline values")
 	h.key(tcell.KeyF10, 0, 0)
 	wait(func() bool {
 		return h.a.debug.state == "stopped" && len(h.a.debug.frames) > 0 && h.a.debug.frames[h.a.debug.frameIdx].Line == 8

@@ -297,6 +297,8 @@ var darkDefaults = map[string]string{
 	"settings.modifiedItemIndicator": "#0C7D9D",
 	"debugToolBar.background":        "#333333",
 	"welcomePage.tileBackground":     "#252526",
+	"editor.inlineValuesForeground":  "#FFFFFF80",
+	"editor.inlineValuesBackground":  "#FFC80033",
 	// merge conflicts
 	"merge.currentHeaderBackground":   "#40C8AE80",
 	"merge.currentContentBackground":  "#40C8AE33",
@@ -307,17 +309,18 @@ var darkDefaults = map[string]string{
 }
 
 var lightOverrides = map[string]string{
-	"debugTokenExpression.name":   "#9B46B0",
-	"debugTokenExpression.value":  "#6C6C6CCC",
-	"debugTokenExpression.string": "#A31515",
-	"foreground":                  "#616161",
-	"descriptionForeground":       "#717171",
-	"errorForeground":             "#A1260D",
-	"focusBorder":                 "#0090F1",
-	"widget.shadow":               "#00000029",
-	"textLink.foreground":         "#006AB1",
-	"textPreformat.foreground":    "#A31515",
-	"textCodeBlock.background":    "#DCDCDC66",
+	"editor.inlineValuesForeground": "#00000080",
+	"debugTokenExpression.name":     "#9B46B0",
+	"debugTokenExpression.value":    "#6C6C6CCC",
+	"debugTokenExpression.string":   "#A31515",
+	"foreground":                    "#616161",
+	"descriptionForeground":         "#717171",
+	"errorForeground":               "#A1260D",
+	"focusBorder":                   "#0090F1",
+	"widget.shadow":                 "#00000029",
+	"textLink.foreground":           "#006AB1",
+	"textPreformat.foreground":      "#A31515",
+	"textCodeBlock.background":      "#DCDCDC66",
 
 	"editor.background":                     "#FFFFFF",
 	"editor.foreground":                     "#000000",

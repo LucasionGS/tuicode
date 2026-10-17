@@ -59,6 +59,7 @@ var Defaults = map[string]any{
 	"editor.autoClosingBrackets":                  "languageDefined",
 	"editor.linkedEditing":                        false,
 	"editor.codeLens":                             true,
+	"debug.inlineValues":                          "auto",
 	"merge-conflict.codeLens.enabled":             true,
 	"merge-conflict.decorators.enabled":           true,
 	"git.blame.editorDecoration.enabled":          false,

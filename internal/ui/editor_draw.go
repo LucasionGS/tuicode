@@ -187,6 +187,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	guideX, guideFrom, guideTo := v.activeIndentGuide()
 	bracketColors := a.settings.Bool("editor.bracketPairColorization.enabled", "")
 	frameLine := a.currentFrameLine(v)
+	inlineVals := a.inlineValues(v, frameLine)
 	a.maybeRequestInlayHints(v)
 	a.maybeRequestCodeLens(v)
 	v.doc.mergeConflicts()
@@ -595,6 +596,11 @@ func (v *EditorView) draw(r Rect, focused bool) {
 			if _, ok := v.doc.conflictAt(line); ok {
 				a.cv.Text(max(x+1, text.X), y, text.X+text.W, label, base.Background(rowBg).Foreground(th.OverColor("descriptionForeground", rowBg)))
 			}
+		}
+		// debug inline values
+		if iv, ok := inlineVals[line]; ok && lastSeg {
+			ist := base.Background(th.OverColor("editor.inlineValuesBackground", rowBg)).Foreground(th.OverColor("editor.inlineValuesForeground", rowBg))
+			a.cv.Text(max(x+1, text.X), y, text.X+text.W, iv, ist)
 		}
 		// git blame after the cursor line
 		if lastSeg && line == cur.Line && focused && len(v.sels) == 1 && a.settings.Bool("git.blame.editorDecoration.enabled", "") {
