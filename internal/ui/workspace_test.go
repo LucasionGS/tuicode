@@ -307,3 +307,30 @@ func TestProblemsFilter(t *testing.T) {
 		t.Fatal("wrong rows shown")
 	}
 }
+
+func TestLaunchInputs(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{".vscode/tasks.json": `{"version": "2.0.0",
+		"inputs": [{"id": "who", "type": "pickString", "description": "Who?", "options": ["world", "you"]}],
+		"tasks": [{"label": "greet", "type": "shell", "command": "echo hello ${input:who}"}]}`})
+	h := newHarness(t, 120, 30, Options{Paths: []string{dir}})
+	var got map[string]any
+	h.a.resolveInteractiveVars(map[string]any{"command": "echo hello ${input:who}", "processId": "${command:pickProcess}"}, func(r map[string]any) { got = r })
+	if h.a.quick == nil {
+		t.Fatal("no picker for the input")
+	}
+	h.a.quick.input.SetText("you")
+	h.a.quick.refilter()
+	h.key(tcell.KeyEnter, 0, 0)
+	if h.a.quick == nil {
+		t.Fatal("no process picker")
+	}
+	h.a.quick.input.SetText("")
+	h.a.quick.refilter()
+	h.key(tcell.KeyEnter, 0, 0)
+	if got == nil || got["command"] != "echo hello you" {
+		t.Fatalf("resolved: %v", got)
+	}
+	if _, isNum := got["processId"].(int); !isNum {
+		t.Fatalf("processId should be a number: %#v", got["processId"])
+	}
+}

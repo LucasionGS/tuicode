@@ -344,6 +344,11 @@ func (a *App) adapterFor(typ string, cfg map[string]any) ([]string, bool, error)
 
 // launch starts a debug session from a configuration.
 func (a *App) launch(raw map[string]any, noDebug bool) {
+	if findInteractiveVar(raw) != "" {
+		// ${input:...} and ${command:pickProcess} are asked for first
+		a.resolveInteractiveVars(raw, func(resolved map[string]any) { a.launch(resolved, noDebug) })
+		return
+	}
 	cfg := a.substituteAny(raw).(map[string]any)
 	typ, _ := cfg["type"].(string)
 	name, _ := cfg["name"].(string)

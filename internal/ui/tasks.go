@@ -273,6 +273,14 @@ func (a *App) runTask(t task) {
 // runTaskThen runs a task and calls done with its exit code when it ends.
 func (a *App) runTaskThen(t task, done func(exitCode int)) {
 	a.lastRunTask = &t
+	if vars := map[string]any{"command": t.Command, "cwd": t.Cwd}; findInteractiveVar(vars) != "" {
+		a.resolveInteractiveVars(vars, func(r map[string]any) {
+			t.Command, _ = r["command"].(string)
+			t.Cwd, _ = r["cwd"].(string)
+			a.runTaskThen(t, done)
+		})
+		return
+	}
 	cwd := a.root
 	if t.Cwd != "" {
 		cwd = a.substituteVars(t.Cwd)
