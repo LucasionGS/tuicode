@@ -81,3 +81,31 @@ func TestPerfTerminalFlood(t *testing.T) {
 		t.Fatal("flood did not finish")
 	}
 }
+
+func TestPerfLongLine(t *testing.T) {
+	if os.Getenv("TUI_PERF") == "" {
+		t.Skip("set TUI_PERF=1")
+	}
+	line := strings.Repeat("var a=function(b){return b*2};", 17000)
+	dir := tempWorkspace(t, map[string]string{"min.js": line + "\n"})
+	start := time.Now()
+	h := newHarness(t, 200, 60, Options{Paths: []string{filepath.Join(dir, "min.js")}})
+	t.Logf("open: %v (%d chars)", time.Since(start), len(line))
+	start = time.Now()
+	for i := 0; i < 20; i++ {
+		h.a.draw()
+	}
+	t.Logf("draw: %v per frame", time.Since(start)/20)
+	start = time.Now()
+	for i := 0; i < 20; i++ {
+		h.a.handleEvent(tcell.NewEventKey(tcell.KeyRune, 'x', 0))
+		h.a.draw()
+	}
+	t.Logf("type+draw: %v per key", time.Since(start)/20)
+	h.key(tcell.KeyEnd, 0, 0)
+	start = time.Now()
+	for i := 0; i < 20; i++ {
+		h.a.draw()
+	}
+	t.Logf("draw at line end: %v per frame", time.Since(start)/20)
+}
