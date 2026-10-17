@@ -151,5 +151,14 @@ func TestShellIntegration(t *testing.T) {
 	if cmds := h.a.recentTerminalCommands(); len(cmds) == 0 || cmds[0] != "echo hi; false" {
 		t.Fatalf("recent: %v", cmds)
 	}
+	// long output keeps its command pinned at the top
+	ti.t.WriteInput([]byte("seq 1 100\r"))
+	waitFor("long output", func() bool { ms := marks(); return len(ms) == 3 && ms[1].Mark.Finished })
+	h.a.terminals.scroll(-20)
+	h.flush()
+	if !h.contains("seq 1 100") {
+		h.dump()
+		t.Fatal("sticky command missing")
+	}
 	h.a.terminals.closeAll()
 }

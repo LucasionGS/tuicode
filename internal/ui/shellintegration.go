@@ -98,8 +98,12 @@ func (tp *TerminalPanel) drawDecorations(ti *TermInstance, r Rect) {
 		return
 	}
 	marks := t.Marks()
+	alt := t.AltScreen()
 	t.Unlock()
 	bg := th.C("terminal.background")
+	if !alt {
+		tp.drawStickyCommand(ti, r, marks)
+	}
 	x := r.X - 1
 	for _, m := range marks {
 		y := r.Y + m.Row + ti.scrollOff
@@ -313,4 +317,54 @@ func (a *App) runRecentCommand() {
 			cur.t.WriteInput([]byte(it.Data.(string) + "\r"))
 		}
 	}})
+}
+
+// drawStickyCommand pins the prompt of the command whose output fills the top of the terminal.
+func (tp *TerminalPanel) drawStickyCommand(ti *TermInstance, r Rect, marks []term.MarkRef) {
+	a := tp.app
+	if !a.settings.Bool("terminal.integrated.stickyScroll.enabled", "") || r.H < 4 {
+		return
+	}
+	top := -ti.scrollOff
+	var cur *term.MarkRef
+	for i := range marks {
+		if marks[i].Row <= top {
+			cur = &marks[i]
+		}
+	}
+	if cur == nil || cur.Row >= top || !cur.Mark.Executed {
+		return
+	}
+	th := a.theme
+	bg := th.OverColor("terminalStickyScroll.background", th.C("terminal.background"))
+	ti.t.Lock()
+	line := ti.t.LineAt(cur.Row)
+	ti.t.Unlock()
+	a.cv.Fill(Rect{r.X, r.Y, r.W, 1}, ' ', styleFB(th.C("terminal.foreground"), bg))
+	for x, c := range line.Cells {
+		if x >= r.W {
+			break
+		}
+		if c.Width == 0 || c.Ch == 0 {
+			continue
+		}
+		st := styleFB(tp.color(c.FG, true), bg)
+		if c.BG != 0 {
+			st = st.Background(tp.color(c.BG, false))
+		}
+		a.cv.Set(r.X+x, r.Y, c.Ch, st)
+	}
+	row := cur.Row
+	a.addHit(Rect{r.X, r.Y, r.W, 1}, func(ev MouseEvent) bool {
+		switch ev.Kind {
+		case MousePress:
+			ti.t.Lock()
+			sb := ti.t.ScrollbackLen()
+			ti.t.Unlock()
+			ti.scrollOff = clampInt(-row, 0, sb)
+		case MouseWheel:
+			tp.scroll(ev.WheelDY * 3)
+		}
+		return true
+	})
 }

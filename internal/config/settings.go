@@ -60,6 +60,7 @@ var Defaults = map[string]any{
 	"editor.linkedEditing":                                    false,
 	"editor.codeLens":                                         true,
 	"terminal.integrated.shellIntegration.enabled":            true,
+	"terminal.integrated.stickyScroll.enabled":                true,
 	"terminal.integrated.shellIntegration.decorationsEnabled": "both",
 	"typescript.updateImportsOnFileMove.enabled":              "prompt",
 	"debug.inlineValues":                                      "auto",
