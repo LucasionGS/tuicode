@@ -11,8 +11,10 @@ import (
 )
 
 type clipTool struct {
-	copy  []string
-	paste []string
+	copy         []string
+	paste        []string
+	copyPrimary  []string // the X11/Wayland primary selection, empty when unsupported
+	pastePrimary []string
 }
 
 var clipTools = func() *clipTool {
@@ -21,14 +23,17 @@ var clipTools = func() *clipTool {
 		return err == nil
 	}
 	if os.Getenv("WAYLAND_DISPLAY") != "" && has("wl-copy") && has("wl-paste") {
-		return &clipTool{copy: []string{"wl-copy"}, paste: []string{"wl-paste", "--no-newline"}}
+		return &clipTool{copy: []string{"wl-copy"}, paste: []string{"wl-paste", "--no-newline"},
+			copyPrimary: []string{"wl-copy", "--primary"}, pastePrimary: []string{"wl-paste", "--primary", "--no-newline"}}
 	}
 	if os.Getenv("DISPLAY") != "" {
 		if has("xclip") {
-			return &clipTool{copy: []string{"xclip", "-selection", "clipboard", "-in"}, paste: []string{"xclip", "-selection", "clipboard", "-out"}}
+			return &clipTool{copy: []string{"xclip", "-selection", "clipboard", "-in"}, paste: []string{"xclip", "-selection", "clipboard", "-out"},
+				copyPrimary: []string{"xclip", "-selection", "primary", "-in"}, pastePrimary: []string{"xclip", "-selection", "primary", "-out"}}
 		}
 		if has("xsel") {
-			return &clipTool{copy: []string{"xsel", "--clipboard", "--input"}, paste: []string{"xsel", "--clipboard", "--output"}}
+			return &clipTool{copy: []string{"xsel", "--clipboard", "--input"}, paste: []string{"xsel", "--clipboard", "--output"},
+				copyPrimary: []string{"xsel", "--primary", "--input"}, pastePrimary: []string{"xsel", "--primary", "--output"}}
 		}
 	}
 	if has("pbcopy") {
@@ -304,4 +309,44 @@ func (v *EditorView) convertIndentation(toSpaces bool) {
 	}
 	b.InsertSpaces = toSpaces
 	v.editLinesKeepSelections(edits)
+}
+
+// setPrimarySelection publishes selected text as the primary selection, like VS Code on Linux.
+func (a *App) setPrimarySelection(text string) {
+	a.primaryText = text
+	if clipTools == nil || len(clipTools.copyPrimary) == 0 || sandboxRoot != "" || text == "" {
+		return
+	}
+	cmd := exec.Command(clipTools.copyPrimary[0], clipTools.copyPrimary[1:]...)
+	cmd.Stdin = strings.NewReader(text)
+	if err := cmd.Start(); err == nil {
+		go func() { _ = cmd.Wait() }()
+	}
+}
+
+// getPrimarySelection returns the primary selection (tuicode's own when no tool is available).
+func (a *App) getPrimarySelection() string {
+	if clipTools == nil || len(clipTools.pastePrimary) == 0 || sandboxRoot != "" {
+		return a.primaryText
+	}
+	out, err := exec.Command(clipTools.pastePrimary[0], clipTools.pastePrimary[1:]...).Output()
+	if err != nil {
+		return a.primaryText
+	}
+	return strings.ReplaceAll(string(out), "\r\n", "\n")
+}
+
+// syncPrimarySelection publishes the active editor's selection when it changed.
+func (a *App) syncPrimarySelection() {
+	if !a.settings.Bool("editor.selectionClipboard", "") {
+		return
+	}
+	v := a.ActiveView()
+	if v == nil || v.special != nil || !v.HasSelection() {
+		return
+	}
+	text := v.SelectedText()
+	if text != a.primaryText && len(text) < 1<<20 {
+		a.setPrimarySelection(text)
+	}
 }

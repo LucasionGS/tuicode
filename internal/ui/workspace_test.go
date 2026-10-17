@@ -10,6 +10,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"tuicode/internal/buffer"
 	"tuicode/internal/config"
 	"tuicode/internal/lsp"
 )
@@ -332,5 +333,22 @@ func TestLaunchInputs(t *testing.T) {
 	}
 	if _, isNum := got["processId"].(int); !isNum {
 		t.Fatalf("processId should be a number: %#v", got["processId"])
+	}
+}
+
+func TestPrimarySelectionPaste(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "hello world\n\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.txt")}})
+	v := h.a.ActiveView()
+	h.flush()
+	v.SetSelections([]buffer.Selection{{Anchor: buffer.Pos{Col: 6}, Active: buffer.Pos{Col: 11}}}, 0)
+	h.a.syncPrimarySelection()
+	// middle click on the empty second line pastes "world"
+	_, y := h.find("hello world")
+	x, _ := h.find("hello world")
+	h.a.handleEvent(tcell.NewEventMouse(x, y+1, tcell.Button3, 0))
+	h.a.handleEvent(tcell.NewEventMouse(x, y+1, tcell.ButtonNone, 0))
+	if got := h.text(); got != "hello world\nworld\n" {
+		t.Fatalf("middle click paste: %q", got)
 	}
 }

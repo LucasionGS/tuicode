@@ -54,6 +54,7 @@ var Descriptions = map[string]string{
 	"editor.foldingStrategy":                      "Controls the strategy for computing folding ranges.",
 	"editor.showFoldingControls":                  "Controls when the folding controls on the gutter are shown.",
 	"editor.trimAutoWhitespace":                   "Remove trailing auto inserted whitespace.",
+	"editor.selectionClipboard":                   "Controls whether the Linux primary clipboard should be supported.",
 	"editor.emptySelectionClipboard":              "Controls whether copying without a selection copies the current line.",
 	"editor.copyWithSyntaxHighlighting":           "Controls whether syntax highlighting should be copied into the clipboard.",
 	"editor.multiCursorModifier":                  "The modifier to be used to add multiple cursors with the mouse.",

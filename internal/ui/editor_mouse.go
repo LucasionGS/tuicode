@@ -83,16 +83,27 @@ func (v *EditorView) textMouse(ev MouseEvent, row vpos, cells []rowCell, indent 
 		a.showEditorContextMenu(v, ev.X, ev.Y)
 		return
 	case tcell.Button3:
-		// middle button drag makes a column selection
+		// middle button drag makes a column selection; a plain middle click pastes the primary selection
+		before := append([]buffer.Selection{}, v.sels...)
 		v.boxAnchor = p
 		v.boxSelect = true
-		v.updateBoxSelection(p)
+		moved := false
 		a.drag = func(ev MouseEvent) {
 			if ev.Kind == MouseRelease {
 				v.boxSelect = false
+				if !moved && a.settings.Bool("editor.selectionClipboard", "") {
+					v.SetSelections(before, 0)
+					v.SetCursor(p)
+					if text := a.getPrimarySelection(); text != "" {
+						v.PasteText(text, nil, false)
+					}
+				}
 				return
 			}
-			v.updateBoxSelection(v.posAtScreen(ev.X, ev.Y))
+			if q := v.posAtScreen(ev.X, ev.Y); q != p || moved {
+				moved = true
+				v.updateBoxSelection(q)
+			}
 		}
 		return
 	}

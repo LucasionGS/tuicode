@@ -88,6 +88,7 @@ type App struct {
 	hiddenGroups []*EditorGroup // the full layout while one group is maximized
 	lastRunTask  *task
 	forceText    map[string]bool // binary files opened anyway
+	primaryText  string          // the last primary selection tuicode published
 	gitBranch    string
 	gitAhead     int
 	gitBehind    int
@@ -567,6 +568,7 @@ func (a *App) tick() {
 	if a.tickCount%4 == 2 {
 		a.ports.refresh()
 	}
+	a.syncPrimarySelection()
 }
 
 func (a *App) handleEvent(ev tcell.Event) {
