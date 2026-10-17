@@ -17,12 +17,12 @@ var imageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif
 
 // ImagePage previews an image using half-block cells (two pixels per cell).
 type ImagePage struct {
-	app   *App
-	path  string
-	img   image.Image
-	err   error
-	zoom  float64 // 0 = fit
-	size  int64
+	app  *App
+	path string
+	img  image.Image
+	err  error
+	zoom float64 // 0 = fit
+	size int64
 }
 
 func (a *App) openImage(path string) {

@@ -83,6 +83,17 @@ func (v *EditorView) textMouse(ev MouseEvent, row vpos, cells []rowCell, indent 
 		a.showEditorContextMenu(v, ev.X, ev.Y)
 		return
 	case tcell.Button3:
+		// middle button drag makes a column selection
+		v.boxAnchor = p
+		v.boxSelect = true
+		v.updateBoxSelection(p)
+		a.drag = func(ev MouseEvent) {
+			if ev.Kind == MouseRelease {
+				v.boxSelect = false
+				return
+			}
+			v.updateBoxSelection(v.posAtScreen(ev.X, ev.Y))
+		}
 		return
 	}
 	alt := ev.Mods&tcell.ModAlt != 0
