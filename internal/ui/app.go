@@ -19,7 +19,7 @@ import (
 )
 
 // Version is the application version.
-const Version = "0.1.0"
+const Version = "0.2.0"
 
 // AppName is shown in window titles.
 const AppName = "tuicode"

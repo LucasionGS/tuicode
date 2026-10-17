@@ -322,7 +322,7 @@ func WorkspaceFolders(root string, folders []string) []map[string]any {
 func (c *Client) Initialize(initOptions any, done func(error)) {
 	params := map[string]any{
 		"processId":        os.Getpid(),
-		"clientInfo":       map[string]any{"name": "tuicode", "version": "0.1.0"},
+		"clientInfo":       map[string]any{"name": "tuicode", "version": "0.2.0"},
 		"rootUri":          PathToURI(c.Root),
 		"rootPath":         c.Root,
 		"workspaceFolders": WorkspaceFolders(c.Root, c.Folders),
