@@ -448,3 +448,16 @@ func TestESLint(t *testing.T) {
 	v.buf().Undo()
 	h.a.lsp.ShutdownAll()
 }
+
+func TestProblemHoverActions(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.go": "package a\n\nvar x = y\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.go")}})
+	v := h.a.ActiveView()
+	h.a.lsp.SetDiagnostics(filepath.Join(dir, "a.go"), "test", []lsp.Diagnostic{{Range: lsp.Range{Start: lsp.Position{Line: 2, Character: 8}, End: lsp.Position{Line: 2, Character: 9}}, Severity: 1, Message: "undefined: y"}})
+	h.a.showHover(v, buffer.Pos{Line: 2, Col: 8}, true)
+	h.flush()
+	if !h.contains("undefined: y") || !h.contains("Quick Fix... (Ctrl+.)") || !h.contains("View Problem") {
+		h.dump()
+		t.Fatal("problem hover actions missing")
+	}
+}

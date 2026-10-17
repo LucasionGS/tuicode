@@ -325,6 +325,12 @@ type Hover struct {
 	scrollY int
 	rect    Rect
 	md      string
+	actions []hoverAction // VS Code's status row under problem hovers
+}
+
+type hoverAction struct {
+	label string
+	run   func()
 }
 
 func (h *Hover) contains(x, y int) bool { return h.rect.Contains(x, y) }
@@ -372,6 +378,18 @@ func (a *App) showHover(v *EditorView, p buffer.Pos, mouse bool) {
 		}
 		md := strings.Join(all, "\n\n---\n\n")
 		v.hover = &Hover{v: v, anchor: p, mouse: mouse, md: md}
+		if len(parts) > 0 {
+			v.hover.actions = []hoverAction{
+				{"View Problem (" + keyOr(a.keyLabel("editor.action.marker.next"), "Alt+F8") + ")", func() {
+					v.SetCursor(p)
+					a.RunCommand("editor.action.marker.next", nil)
+				}},
+				{"Quick Fix... (" + keyOr(a.keyLabel("editor.action.quickFix"), "Ctrl+.") + ")", func() {
+					v.SetCursor(p)
+					a.showCodeActions(v, "")
+				}},
+			}
+		}
 	}
 	if a.debug != nil && a.debug.state == "stopped" {
 		expr := ""
@@ -452,6 +470,17 @@ func (h *Hover) draw() {
 	if hgt == 0 {
 		return
 	}
+	actW := 0
+	for _, act := range h.actions {
+		actW += StrWidth(act.label) + 3
+	}
+	if len(h.actions) > 0 {
+		w = max(w, min(actW+1, maxW))
+	}
+	textH := hgt
+	if len(h.actions) > 0 {
+		hgt++
+	}
 	// prefer above the line
 	top := y - hgt
 	if top < v.full.Y {
@@ -468,17 +497,17 @@ func (h *Hover) draw() {
 	a.cv.clip = Rect{0, 0, a.width, a.height}
 	bgc := th.C("editorHoverWidget.background")
 	a.cv.Fill(h.rect, ' ', styleFB(th.C("editorHoverWidget.foreground"), bgc))
-	h.scrollY = clampInt(h.scrollY, 0, max(len(h.lines)-hgt, 0))
-	for i := 0; i < hgt; i++ {
+	h.scrollY = clampInt(h.scrollY, 0, max(len(h.lines)-textH, 0))
+	for i := 0; i < textH; i++ {
 		idx := h.scrollY + i
 		if idx >= len(h.lines) {
 			break
 		}
 		h.lines[idx].draw(a, left+1, top+i, left+w-1, bgc)
 	}
-	if len(h.lines) > hgt {
-		sh := max(hgt*hgt/len(h.lines), 1)
-		sy := h.scrollY * (hgt - sh) / max(len(h.lines)-hgt, 1)
+	if len(h.lines) > textH {
+		sh := max(textH*textH/len(h.lines), 1)
+		sy := h.scrollY * (textH - sh) / max(len(h.lines)-textH, 1)
 		for i := sy; i < sy+sh; i++ {
 			a.cv.Set(left+w-1, top+i, ' ', styleFB(bgc, th.OverColor("scrollbarSlider.background", bgc)))
 		}
@@ -486,12 +515,31 @@ func (h *Hover) draw() {
 	a.addHit(h.rect, func(ev MouseEvent) bool {
 		switch ev.Kind {
 		case MouseWheel:
-			h.scrollY = clampInt(h.scrollY+ev.WheelDY, 0, max(len(h.lines)-hgt, 0))
+			h.scrollY = clampInt(h.scrollY+ev.WheelDY, 0, max(len(h.lines)-textH, 0))
 		case MousePress:
 			h.focused = true
 		}
 		return true
 	})
+	if len(h.actions) > 0 {
+		// action row: "View Problem (Alt+F8)   Quick Fix... (Ctrl+.)"
+		ay := top + hgt - 1
+		sbg := th.OverColor("editorHoverWidget.statusBarBackground", bgc)
+		a.cv.Fill(Rect{left, ay, w, 1}, ' ', styleFB(th.C("textLink.foreground"), sbg))
+		ax := left + 1
+		for _, act := range h.actions {
+			end := a.cv.Text(ax, ay, left+w, act.label, styleFB(th.C("textLink.foreground"), sbg))
+			run := act.run
+			a.addHit(Rect{ax, ay, end - ax, 1}, func(ev MouseEvent) bool {
+				if ev.Kind == MousePress {
+					v.hover = nil
+					run()
+				}
+				return true
+			})
+			ax = end + 3
+		}
+	}
 }
 
 //#endregion
@@ -707,3 +755,10 @@ func (s *SignatureHelpState) draw() {
 }
 
 //#endregion
+
+func keyOr(label, fallback string) string {
+	if label == "" {
+		return fallback
+	}
+	return label
+}
