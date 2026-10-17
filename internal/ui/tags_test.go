@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
@@ -91,5 +92,41 @@ func TestSettingsJSONCompletion(t *testing.T) {
 	h.key(tcell.KeyEnter, 0, 0)
 	if got := h.text(); got != "{\n  \"editor.linkedEditing\": true\n}\n" {
 		t.Fatalf("value: %q", got)
+	}
+}
+
+func TestEditorGridLayout(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "alpha\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "a.txt")}})
+	h.a.RunCommand("workbench.action.editorLayoutTwoByTwoGrid", nil)
+	h.flush()
+	if len(h.a.groups) != 4 {
+		t.Fatalf("groups: %d", len(h.a.groups))
+	}
+	rects := h.a.groupRects(h.a.rEditor)
+	if rects[0].X != rects[1].X || rects[1].Y <= rects[0].Y || rects[2].X <= rects[0].X || rects[3].Y <= rects[2].Y {
+		t.Fatalf("not a 2x2 grid: %v", rects)
+	}
+	h.a.RunCommand("workbench.action.focusBelowGroup", nil)
+	if h.a.activeGroup != 1 {
+		t.Fatalf("below: %d", h.a.activeGroup)
+	}
+	h.a.RunCommand("workbench.action.focusRightGroup", nil)
+	if h.a.activeGroup != 3 {
+		t.Fatalf("right: %d", h.a.activeGroup)
+	}
+	// closing a column's top group keeps the other column intact
+	h.a.closeGroup(2)
+	if len(h.a.groupColumns()) != 2 || h.a.groups[2].below {
+		t.Fatalf("columns after close: %v", h.a.groupColumns())
+	}
+	h.a.RunCommand("workbench.action.toggleEditorGroupLayout", nil)
+	if len(h.a.groupColumns()) != 1 {
+		t.Fatalf("toggle: %v", h.a.groupColumns())
+	}
+	h.flush()
+	if strings.Count(strings.Join(h.screen(), "\n"), "a.txt") < 3 {
+		h.dump()
+		t.Fatal("stacked groups not drawn")
 	}
 }

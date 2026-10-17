@@ -562,32 +562,11 @@ func (a *App) closeGroup(i int) {
 	for len(g.tabs) > 0 {
 		g.removeTab(0)
 	}
-	a.groups = append(a.groups[:i], a.groups[i+1:]...)
-	if a.activeGroup >= len(a.groups) {
-		a.activeGroup = len(a.groups) - 1
-	}
+	a.removeGroupAt(i)
 }
 
 func (a *App) splitEditor() {
-	v := a.ActiveView()
-	if len(a.groups) >= 4 {
-		a.setStatusMessage("Too many editor groups")
-		return
-	}
-	ng := a.newGroup()
-	at := a.activeGroup + 1
-	a.groups = append(a.groups, nil)
-	copy(a.groups[at+1:], a.groups[at:])
-	a.groups[at] = ng
-	a.activeGroup = at
-	if v != nil && v.special == nil {
-		nv := a.newEditorView(v.doc)
-		nv.SetSelections(append([]buffer.Selection{}, v.sels...), v.primary)
-		nv.topLine, nv.topSeg = v.topLine, v.topSeg
-		nv.wrap = v.wrap
-		ng.addTab(nv, false)
-	}
-	a.focusEditor()
+	a.splitEditorDir(false)
 }
 
 func (a *App) focusGroup(i int) {
@@ -636,7 +615,7 @@ func (a *App) moveEditorToGroup(dir int) {
 		return
 	}
 	if target >= len(a.groups) {
-		if len(a.groups) >= 4 {
+		if len(a.groups) >= maxEditorGroups {
 			return
 		}
 		a.groups = append(a.groups, a.newGroup())
@@ -652,8 +631,7 @@ func (a *App) moveEditorToGroup(dir int) {
 	tg.addTab(v, false)
 	a.activeGroup = target
 	if len(g.tabs) == 0 {
-		gi := a.groupIndex(g)
-		a.groups = append(a.groups[:gi], a.groups[gi+1:]...)
+		a.removeGroupAt(a.groupIndex(g))
 		a.activeGroup = a.groupIndex(tg)
 	}
 	a.focusEditor()
@@ -666,6 +644,8 @@ func (a *App) moveGroup(dir int) {
 		return
 	}
 	a.groups[i], a.groups[j] = a.groups[j], a.groups[i]
+	// the layout belongs to the positions, not the groups
+	a.groups[i].below, a.groups[j].below = a.groups[j].below, a.groups[i].below
 	a.activeGroup = j
 }
 

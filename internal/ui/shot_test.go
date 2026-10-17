@@ -248,3 +248,18 @@ func TestScreenshotPeek(t *testing.T) {
 	}
 	h.a.lsp.ShutdownAll()
 }
+
+func TestScreenshotGrid(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" {
+		t.Skip("set TUI_SHOT")
+	}
+	wd, _ := os.Getwd()
+	root := filepath.Dir(filepath.Dir(wd))
+	h := newHarness(t, 150, 42, Options{Paths: []string{filepath.Join(root, "internal/ui/grouplayout.go")}})
+	h.a.RunCommand("workbench.action.editorLayoutTwoByTwoGrid", nil)
+	h.a.activeGroup = 3
+	h.a.OpenFile(filepath.Join(root, "internal/ui/tags.go"), false)
+	h.settle()
+	h.snapshot(filepath.Join(out, "grid.json"))
+}

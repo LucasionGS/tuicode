@@ -881,25 +881,19 @@ func (a *App) drawEditorArea() {
 	if r.Empty() {
 		return
 	}
-	n := len(a.groups)
-	x := r.X
-	for i, g := range a.groups {
-		w := r.W / n
-		if i == n-1 {
-			w = r.X + r.W - x
-		}
-		gr := Rect{x, r.Y, w, r.H}
+	th := a.theme
+	for i, gr := range a.groupRects(r) {
+		g := a.groups[i]
+		right := gr.X+gr.W < r.X+r.W
 		a.cv.clip = gr
 		g.draw(gr, i == a.activeGroup)
-		if i < n-1 {
+		if right {
 			// group divider
-			th := a.theme
+			a.cv.clip = Rect{0, 0, a.width, a.height}
 			for y := gr.Y; y < gr.Y+gr.H; y++ {
-				a.cv.clip = Rect{0, 0, a.width, a.height}
 				a.cv.Set(gr.X+gr.W-1, y, '│', styleFB(th.OverColor("editorGroup.border", th.C("editor.background")), th.C("editor.background")))
 			}
 		}
-		x += w
 	}
 }
 

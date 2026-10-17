@@ -25,6 +25,7 @@ type EditorGroup struct {
 	tabsRect Rect
 	scrollX  int
 	dragTab  int
+	below    bool // stacked under the previous group in the same column
 }
 
 func (a *App) newGroup() *EditorGroup {
@@ -592,11 +593,7 @@ func (a *App) closeTabNow(g *EditorGroup, idx int) {
 	}
 	g.removeTab(idx)
 	if len(g.tabs) == 0 && len(a.groups) > 1 {
-		gi := a.groupIndex(g)
-		a.groups = append(a.groups[:gi], a.groups[gi+1:]...)
-		if a.activeGroup >= len(a.groups) {
-			a.activeGroup = len(a.groups) - 1
-		}
+		a.removeGroupAt(a.groupIndex(g))
 	}
 }
 
