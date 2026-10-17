@@ -41,6 +41,7 @@ type Client struct {
 	Name    string
 	Command []string
 	Root    string
+	Folders []string // workspace folders, Root when empty
 
 	cmd   *exec.Cmd
 	stdin io.WriteCloser
@@ -305,18 +306,28 @@ func (c *Client) WhenReady(fn func()) {
 	c.queued = append(c.queued, fn)
 }
 
+// WorkspaceFolders returns the LSP workspace folders for a root and optional extra folders.
+func WorkspaceFolders(root string, folders []string) []map[string]any {
+	if len(folders) == 0 {
+		folders = []string{root}
+	}
+	out := make([]map[string]any, 0, len(folders))
+	for _, f := range folders {
+		out = append(out, map[string]any{"uri": PathToURI(f), "name": baseName(f)})
+	}
+	return out
+}
+
 // Initialize performs the initialize handshake. done runs on the UI goroutine.
 func (c *Client) Initialize(initOptions any, done func(error)) {
 	params := map[string]any{
-		"processId":  os.Getpid(),
-		"clientInfo": map[string]any{"name": "tuicode", "version": "0.1.0"},
-		"rootUri":    PathToURI(c.Root),
-		"rootPath":   c.Root,
-		"workspaceFolders": []map[string]any{
-			{"uri": PathToURI(c.Root), "name": baseName(c.Root)},
-		},
-		"capabilities": clientCapabilities(),
-		"trace":        "off",
+		"processId":        os.Getpid(),
+		"clientInfo":       map[string]any{"name": "tuicode", "version": "0.1.0"},
+		"rootUri":          PathToURI(c.Root),
+		"rootPath":         c.Root,
+		"workspaceFolders": WorkspaceFolders(c.Root, c.Folders),
+		"capabilities":     clientCapabilities(),
+		"trace":            "off",
 	}
 	if initOptions != nil {
 		params["initializationOptions"] = initOptions

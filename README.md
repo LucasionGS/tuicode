@@ -49,6 +49,9 @@ A [Nerd Font](https://www.nerdfonts.com) is recommended for the file and UI icon
 - **Command:** `tuicode <folder>`
 - **Description:** Opens a folder as the workspace.
 
+- **Command:** `tuicode <name.code-workspace>`
+- **Description:** Opens a VS Code multi-root workspace with all of its folders and workspace settings.
+
 - **Command:** `tuicode <file> [file...]`
 - **Description:** Opens files. The workspace is the current folder if the file is inside it, otherwise the nearest repository root.
 
@@ -86,7 +89,8 @@ Settings use the same keys and JSON format as VS Code. tuicode reads, in order:
 1. Built-in defaults
 2. `~/.config/Code/User/settings.json` (turn off with `"tuicode.importVSCodeSettings": false`)
 3. `~/.tuicode/settings.json`
-4. `.vscode/settings.json` and `.tuicode/settings.json` in the workspace
+4. The `settings` of an open `.code-workspace` file
+5. `.vscode/settings.json` and `.tuicode/settings.json` in the workspace
 
 Keybindings come from `~/.config/Code/User/keybindings.json` (unless `"tuicode.importVSCodeKeybindings": false`) and `~/.tuicode/keybindings.json`. Snippets come from VS Code's user snippets folder, `~/.tuicode/snippets` and `.vscode/*.code-snippets`. Extra color themes (VS Code theme JSON files) can go in `~/.tuicode/themes`.
 

@@ -15,6 +15,7 @@ Usage: tuicode [options] [paths...]
 
   tuicode                       Open the current folder
   tuicode <folder>              Open a folder
+  tuicode <name.code-workspace> Open a multi-root workspace
   tuicode <file> [file...]      Open files
   tuicode -g <file:line[:col]>  Open a file at a line and column
   tuicode -d <file> <file>      Compare two files

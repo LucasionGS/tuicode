@@ -21,6 +21,8 @@ type exNode struct {
 	children []*exNode
 	loaded   bool
 	modTime  time.Time
+	virtual  bool // the invisible parent of a multi-root workspace's folders
+	isRoot   bool // a workspace root folder
 }
 
 type exRow struct {
@@ -28,6 +30,7 @@ type exRow struct {
 	depth int
 	label string // may be a compacted "a/b/c"
 	input bool
+	root  bool // a multi-root workspace folder
 }
 
 // Explorer is the file tree view.
@@ -69,12 +72,50 @@ func (e *Explorer) setRoot(root string) {
 		e.rows = nil
 		return
 	}
-	e.root = &exNode{path: root, name: filepath.Base(root), isDir: true}
+	folders := e.app.folders()
+	if len(folders) > 1 {
+		// multi-root: each folder is a top-level node
+		e.root = &exNode{name: e.app.workspace.Name() + " (Workspace)", isDir: true, virtual: true, loaded: true}
+		for _, f := range folders {
+			e.root.children = append(e.root.children, &exNode{path: f.Path, name: f.Name, isDir: true, isRoot: true})
+		}
+		e.expanded[folders[0].Path] = true
+		e.refresh()
+		return
+	}
+	name := filepath.Base(root)
+	if len(folders) == 1 && e.app.workspace != nil {
+		root, name = folders[0].Path, folders[0].Name
+	}
+	e.root = &exNode{path: root, name: name, isDir: true}
 	e.expanded[root] = true
 	e.refresh()
 }
 
+// folderOf returns the root folder that contains path (the most specific one in a multi-root workspace).
+func (e *Explorer) folderOf(path string) string {
+	if e.root == nil {
+		return ""
+	}
+	if !e.root.virtual {
+		if path == e.root.path || strings.HasPrefix(path, e.root.path+string(filepath.Separator)) {
+			return e.root.path
+		}
+		return ""
+	}
+	best := ""
+	for _, f := range e.root.children {
+		if (path == f.path || strings.HasPrefix(path, f.path+string(filepath.Separator))) && len(f.path) > len(best) {
+			best = f.path
+		}
+	}
+	return best
+}
+
 func (e *Explorer) load(n *exNode) {
+	if n.virtual {
+		return
+	}
 	entries, err := os.ReadDir(n.path)
 	n.loaded = true
 	if st, err := os.Stat(n.path); err == nil {
@@ -100,8 +141,8 @@ func (e *Explorer) load(n *exNode) {
 			}
 		}
 		rel := name
-		if e.root != nil {
-			if r, err := filepath.Rel(e.root.path, full); err == nil {
+		if base := e.folderOf(full); base != "" {
+			if r, err := filepath.Rel(base, full); err == nil {
 				rel = r
 			}
 		}
@@ -199,6 +240,12 @@ func (e *Explorer) refreshIfChanged() {
 		if changed || !n.isDir || !(e.expanded[n.path] || n == e.root) {
 			return
 		}
+		if n.virtual {
+			for _, c := range n.children {
+				walk(c)
+			}
+			return
+		}
 		if st, err := os.Stat(n.path); err == nil && !st.ModTime().Equal(n.modTime) {
 			changed = true
 			return
@@ -228,7 +275,7 @@ func (e *Explorer) rebuild() {
 		for _, c := range n.children {
 			label := c.name
 			node := c
-			if c.isDir && compact {
+			if c.isDir && compact && !c.isRoot {
 				// fold single-folder chains into one row
 				for e.expanded[node.path] {
 					if !node.loaded {
@@ -241,7 +288,7 @@ func (e *Explorer) rebuild() {
 					label += "/" + node.name
 				}
 			}
-			e.rows = append(e.rows, exRow{node: node, depth: depth, label: label})
+			e.rows = append(e.rows, exRow{node: node, depth: depth, label: label, root: node.isRoot})
 			if e.editing != nil && e.editing.rename == "" && e.editing.parent == node.path {
 				e.rows = append(e.rows, exRow{depth: depth + 1, input: true})
 			}
@@ -253,7 +300,7 @@ func (e *Explorer) rebuild() {
 			}
 		}
 	}
-	if e.editing != nil && e.editing.rename == "" && e.editing.parent == e.root.path {
+	if e.editing != nil && e.editing.rename == "" && e.editing.parent == e.root.path && !e.root.virtual {
 		e.rows = append(e.rows, exRow{depth: 0, input: true})
 	}
 	add(e.root, 0)
@@ -294,13 +341,18 @@ func (e *Explorer) collapseAll() {
 
 // reveal expands parents of path and selects it.
 func (e *Explorer) reveal(path string, focus bool) {
-	if e.root == nil || !strings.HasPrefix(path, e.root.path+string(filepath.Separator)) {
+	base := e.folderOf(path)
+	if base == "" || base == path {
 		return
 	}
-	rel, _ := filepath.Rel(e.root.path, path)
+	rel, _ := filepath.Rel(base, path)
 	parts := strings.Split(rel, string(filepath.Separator))
-	cur := e.root.path
+	cur := base
 	changed := false
+	if !e.expanded[base] {
+		e.expanded[base] = true
+		changed = true
+	}
 	for _, p := range parts[:len(parts)-1] {
 		cur = filepath.Join(cur, p)
 		if !e.expanded[cur] {
@@ -501,6 +553,9 @@ func (e *Explorer) targetDir() string {
 	}
 	n := e.current()
 	if n == nil {
+		if e.root.virtual {
+			return e.root.children[0].path
+		}
 		return e.root.path
 	}
 	if n.isDir {
@@ -988,6 +1043,9 @@ func (e *Explorer) draw(r Rect) {
 			right = "●"
 		}
 		rightW := StrWidth(right)
+		if row.root {
+			nameSt = nameSt.Bold(true)
+		}
 		a.cv.TextEllipsis(x, y, body.X+body.W-x-rightW-2, row.label, nameSt)
 		if right != "" {
 			rst := nameSt
@@ -1042,7 +1100,11 @@ func (e *Explorer) draw(r Rect) {
 			a.setFocus(FocusSidebar)
 			if ev.Button == tcell.Button2 {
 				e.selected = -1
-				e.contextMenu(e.root, ev.X, ev.Y)
+				target := e.root
+				if target.virtual {
+					target = target.children[0]
+				}
+				e.contextMenu(target, ev.X, ev.Y)
 			}
 		}
 		return true
@@ -1160,7 +1222,7 @@ func (e *Explorer) contextMenu(n *exNode, x, y int) {
 		MenuItem{Label: "Copy Path", Key: "Ctrl+Alt+C", Run: func() { a.setClipboard(n.path) }},
 		MenuItem{Label: "Copy Relative Path", Run: func() { a.setClipboard(a.relPath(n.path)) }},
 	)
-	if n != e.root {
+	if n != e.root && !n.isRoot {
 		if !n.isDir {
 			items = append(items, MenuItem{Separator: true},
 				MenuItem{Label: "Open to the Side", Run: func() {

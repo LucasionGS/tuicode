@@ -101,6 +101,7 @@ func (a *App) openFolder(path string) {
 	}
 	a.saveSessionSafe()
 	a.closeAllEditors()
+	a.workspace = nil
 	a.root = path
 	a.explorer.setRoot(path)
 	if a.lsp != nil {
@@ -113,6 +114,48 @@ func (a *App) openFolder(path string) {
 	a.addRecentFolder(path)
 	a.restoreSession()
 	a.showSidebar("explorer")
+}
+
+// openWorkspace opens a `.code-workspace` file with all of its root folders.
+func (a *App) openWorkspace(path string) {
+	ws, err := config.LoadWorkspace(path)
+	if err != nil {
+		a.notify(NotifyError, err.Error())
+		return
+	}
+	if err := checkSandbox(ws.PrimaryRoot()); err != nil {
+		a.notify(NotifyError, err.Error())
+		return
+	}
+	a.saveSessionSafe()
+	a.closeAllEditors()
+	a.workspace = ws
+	a.root = ws.PrimaryRoot()
+	a.loadSettings()
+	a.explorer.setRoot(a.root)
+	if a.lsp != nil {
+		a.lsp.ShutdownAll()
+		a.setupLSP()
+	}
+	a.fileIdx = nil
+	a.refreshGit()
+	a.addRecentFolder(path)
+	a.restoreSession()
+	a.showSidebar("explorer")
+}
+
+// suggestWorkspaceFile offers to open the folder's `.code-workspace` file, like VS Code.
+func (a *App) suggestWorkspaceFile() {
+	if a.workspace != nil || a.root == "" {
+		return
+	}
+	matches, _ := filepath.Glob(filepath.Join(a.root, "*.code-workspace"))
+	if len(matches) != 1 {
+		return
+	}
+	file := matches[0]
+	a.notify(NotifyInfo, "This folder contains a workspace file '"+filepath.Base(file)+"'. Do you want to open it?",
+		NotifyAction{Label: "Open Workspace", Run: func() { a.openWorkspace(file) }})
 }
 
 func (a *App) saveActive(as bool) {
@@ -882,6 +925,8 @@ func (a *App) showOpenRecent() {
 		p := it.Data.(string)
 		if st, err := os.Stat(p); err == nil && st.IsDir() {
 			a.openFolder(p)
+		} else if config.IsWorkspaceFile(p) {
+			a.openWorkspace(p)
 		} else {
 			a.OpenFile(p, false)
 			a.focusEditor()
@@ -924,8 +969,8 @@ func (a *App) saveSession() {
 		c := v.Cursor()
 		ws.Tabs = append(ws.Tabs, tabSave{Path: v.buf().Path, Line: c.Line, Col: c.Col, Top: v.topLine})
 	}
-	st.Workspaces[a.root] = ws
-	a.addRecentFolder(a.root)
+	st.Workspaces[a.sessionKey()] = ws
+	a.addRecentFolder(a.sessionKey())
 	a.writeState()
 }
 
@@ -935,7 +980,7 @@ func (a *App) restoreSession() {
 		return
 	}
 	st := a.loadState()
-	ws, ok := st.Workspaces[a.root]
+	ws, ok := st.Workspaces[a.sessionKey()]
 	if !ok {
 		return
 	}
@@ -1013,7 +1058,7 @@ type backupEntry struct {
 }
 
 func (a *App) backupPath() string {
-	key := a.root
+	key := a.sessionKey()
 	if key == "" {
 		key = "empty"
 	}

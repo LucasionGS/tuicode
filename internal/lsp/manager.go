@@ -51,6 +51,7 @@ type Progress struct {
 // Manager starts language servers and keeps open buffers in sync with them.
 type Manager struct {
 	Root     string
+	Folders  []string // multi-root workspace folders
 	Dispatch func(func())
 
 	// Hooks into the UI. All are called on the UI goroutine.
@@ -219,6 +220,7 @@ func (m *Manager) clientFor(cmd []string) *Client {
 			m.OnStatus()
 		}
 	}
+	c.Folders = m.Folders
 	c.Initialize(m.initOptions(cmd), func(err error) {
 		if err != nil {
 			m.log(name, "Initialize failed: "+err.Error())
@@ -337,7 +339,7 @@ func (m *Manager) handleRequest(c *Client, method string, params json.RawMessage
 		}
 		return map[string]any{"applied": ok}, nil
 	case "workspace/workspaceFolders":
-		return []map[string]any{{"uri": PathToURI(m.Root), "name": filepath.Base(m.Root)}}, nil
+		return WorkspaceFolders(m.Root, m.Folders), nil
 	case "window/showDocument":
 		var p struct {
 			URI       string `json:"uri"`

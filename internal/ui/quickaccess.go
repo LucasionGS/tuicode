@@ -436,11 +436,24 @@ func (a *App) workspaceFiles(done func()) []string {
 	}
 	if !idx.loading && (idx.built.IsZero() || time.Since(idx.built) > 10*time.Second) {
 		idx.loading = true
-		root := a.root
+		var roots []string
+		for _, f := range a.folders() {
+			roots = append(roots, f.Path)
+		}
 		gitRoot := a.gitRoot
 		exclude := a.excludeMatcher()
 		go func() {
-			files := listFiles(root, gitRoot, exclude)
+			var files []string
+			seen := map[string]bool{}
+			for _, root := range roots {
+				for _, f := range listFiles(root, gitRoot, exclude) {
+					// folders of a workspace may overlap
+					if !seen[f] {
+						seen[f] = true
+						files = append(files, f)
+					}
+				}
+			}
 			a.Post(func() {
 				idx.files = files
 				idx.built = time.Now()

@@ -212,6 +212,12 @@ func loadJSONFile(path string) (map[string]any, error) {
 
 // LoadSettings reads all settings layers for a workspace.
 func LoadSettings(workspace string) *Settings {
+	return LoadWorkspaceSettings(workspace, nil)
+}
+
+// LoadWorkspaceSettings is LoadSettings with a multi-root workspace's settings layered between
+// the user settings and the folder settings.
+func LoadWorkspaceSettings(workspace string, ws *Workspace) *Settings {
 	s := &Settings{layers: []map[string]any{Defaults}}
 	add := func(path string) {
 		m, err := loadJSONFile(path)
@@ -235,6 +241,10 @@ func LoadSettings(workspace string) *Settings {
 		add(filepath.Join(VSCodeUserDir(), "settings.json"))
 	}
 	add(UserSettingsPath())
+	if ws != nil && ws.Settings != nil {
+		s.layers = append(s.layers, ws.Settings)
+		s.LayerPaths = append(s.LayerPaths, ws.File)
+	}
 	if workspace != "" {
 		add(filepath.Join(workspace, ".vscode", "settings.json"))
 		add(filepath.Join(workspace, ".tuicode", "settings.json"))

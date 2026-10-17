@@ -338,3 +338,29 @@ func TestScreenshotSidebarRight(t *testing.T) {
 	h.settle()
 	h.snapshot(filepath.Join(out, "right.json"))
 }
+
+// TestScreenshotProject opens TUI_FILE with language servers and waits for semantic tokens.
+func TestScreenshotProject(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	file := os.Getenv("TUI_FILE")
+	if out == "" || file == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT, TUI_FILE and TUI_LSP")
+	}
+	h := newHarness(t, 160, 45, Options{Paths: []string{file}})
+	for i := 0; i < 150; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+		if v := h.a.ActiveView(); v != nil && v.doc.semSpans != nil {
+			break
+		}
+	}
+	h.settle()
+	if cmd := os.Getenv("TUI_CMD"); cmd != "" {
+		h.a.RunCommand(cmd, nil)
+		h.settle()
+	}
+	h.snapshot(filepath.Join(out, "project.json"))
+	if h.a.lsp != nil {
+		h.a.lsp.ShutdownAll()
+	}
+}

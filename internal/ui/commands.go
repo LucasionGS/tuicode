@@ -183,8 +183,23 @@ func (a *App) registerCommands() {
 	})
 	a.cmd("workbench.action.closeFolder", "Workspaces", "Close Folder", func(any) {
 		a.closeAllEditors()
+		a.workspace = nil
 		a.root = ""
 		a.explorer.setRoot("")
+	})
+	a.alias("workbench.action.closeWorkspace", "workbench.action.closeFolder")
+	a.cmd("workbench.action.openWorkspace", "File", "Open Workspace from File...", func(any) {
+		start := a.root
+		if start == "" {
+			start, _ = os.Getwd()
+		}
+		a.pathPicker("Open Workspace from File", start+string(filepath.Separator), false, func(p string) {
+			if !config.IsWorkspaceFile(p) {
+				a.notify(NotifyError, "'"+filepath.Base(p)+"' is not a .code-workspace file.")
+				return
+			}
+			a.openWorkspace(p)
+		})
 	})
 	a.cmd("workbench.action.quit", "File", "Exit", func(any) { a.requestQuit() })
 	a.alias("workbench.action.closeWindow", "workbench.action.quit")

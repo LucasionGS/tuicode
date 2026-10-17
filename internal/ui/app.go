@@ -83,6 +83,7 @@ type App struct {
 	settings  *config.Settings
 	root      string
 	gitRoot   string
+	workspace *config.Workspace // open .code-workspace, nil for a single folder
 	gitBranch string
 	gitAhead  int
 	gitBehind int
@@ -247,6 +248,13 @@ func New(opts Options) (*App, error) {
 			if a.root == "" {
 				a.root = abs
 			}
+		} else if config.IsWorkspaceFile(abs) && a.workspace == nil && a.root == "" {
+			if ws, err := config.LoadWorkspace(abs); err == nil {
+				a.workspace = ws
+				a.root = ws.PrimaryRoot()
+			} else {
+				defer a.notify(NotifyError, err.Error())
+			}
 		} else {
 			files = append(files, abs)
 		}
@@ -333,7 +341,7 @@ func guessRoot(file string) string {
 }
 
 func (a *App) loadSettings() {
-	a.settings = config.LoadSettings(a.root)
+	a.settings = config.LoadWorkspaceSettings(a.root, a.workspace)
 	a.applySettings()
 }
 
@@ -443,6 +451,7 @@ func (a *App) Run() error {
 	// tell kitty an editor is running so conditional key mappings can pass shortcuts through
 	a.writeTTY("\x1b]1337;SetUserVar=in_editor=MQ==\x07")
 	a.suggestKittySetup()
+	a.suggestWorkspaceFile()
 	defer a.writeTTY("\x1b]1337;SetUserVar=in_editor\x07")
 	a.applyTerminalTitle()
 
@@ -1223,6 +1232,11 @@ func gitLetter(st git.FileStatus) string {
 
 func (a *App) setupLSP() {
 	m := lsp.NewManager(a.root, a.Post)
+	if a.workspace != nil {
+		for _, f := range a.workspace.Folders {
+			m.Folders = append(m.Folders, f.Path)
+		}
+	}
 	m.Overrides = a.lspOverrides()
 	m.Log = func(server, line string) {
 		a.output.append("Language Server: "+server, line)
@@ -1374,10 +1388,32 @@ func (a *App) relPath(path string) string {
 }
 
 func (a *App) rootName() string {
+	if a.workspace != nil {
+		return a.workspace.Name() + " (Workspace)"
+	}
 	if a.root == "" {
 		return ""
 	}
 	return filepath.Base(a.root)
+}
+
+// folders returns the workspace root folders: the folders of a `.code-workspace`, or the open folder.
+func (a *App) folders() []config.WorkspaceFolder {
+	if a.workspace != nil {
+		return a.workspace.Folders
+	}
+	if a.root == "" {
+		return nil
+	}
+	return []config.WorkspaceFolder{{Name: filepath.Base(a.root), Path: a.root}}
+}
+
+// sessionKey identifies the workspace in the saved state.
+func (a *App) sessionKey() string {
+	if a.workspace != nil {
+		return a.workspace.File
+	}
+	return a.root
 }
 
 func (a *App) applyTerminalTitle() {

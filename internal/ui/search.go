@@ -181,7 +181,10 @@ func (s *SearchView) run() {
 	s.cancel = cancel
 	s.running = true
 	s.message = ""
-	root := a.root
+	var roots []string
+	for _, f := range a.folders() {
+		roots = append(roots, f.Path)
+	}
 	opts := searchOpts{query: q, regex: s.regex, caseSens: s.caseSens, wholeWord: s.wholeWord,
 		include: splitGlobs(s.include.Text()), exclude: splitGlobs(s.exclude.Text())}
 	for pat, v := range a.settings.Map("search.exclude") {
@@ -199,7 +202,23 @@ func (s *SearchView) run() {
 		}
 	}
 	go func() {
-		res, truncated, err := searchFiles(ctx, root, gitRoot, opts, exclude, dirty)
+		var res []*searchFile
+		var truncated bool
+		var err error
+		seen := map[string]bool{}
+		for _, root := range roots {
+			r, tr, e := searchFiles(ctx, root, gitRoot, opts, exclude, dirty)
+			truncated = truncated || tr
+			if e != nil {
+				err = e
+			}
+			for _, f := range r {
+				if !seen[f.path] {
+					seen[f.path] = true
+					res = append(res, f)
+				}
+			}
+		}
 		a.Post(func() {
 			if ctx.Err() != nil {
 				return
