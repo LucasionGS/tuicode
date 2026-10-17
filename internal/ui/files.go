@@ -25,6 +25,10 @@ func (a *App) OpenFile(path string, preview bool) *EditorView {
 		a.openFolder(path)
 		return nil
 	}
+	if isImagePath(path) {
+		a.openImage(path)
+		return nil
+	}
 	d, ok := a.docs[path]
 	if !ok {
 		if st, err := os.Stat(path); err == nil && st.Size() > 64*1024*1024 {
