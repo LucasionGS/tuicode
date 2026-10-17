@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -375,4 +376,54 @@ func TestScreenshotMerge(t *testing.T) {
 	h := newHarness(t, 140, 20, Options{Paths: []string{filepath.Join(dir, "main.go")}})
 	h.settle()
 	h.snapshot(filepath.Join(out, "merge.json"))
+}
+
+// TestScreenshotHero renders the README screenshot from TUI_HERO_DIR (a small Go project with tests).
+func TestScreenshotHero(t *testing.T) {
+	out, dir := os.Getenv("TUI_SHOT"), os.Getenv("TUI_HERO_DIR")
+	if out == "" || dir == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT, TUI_HERO_DIR and TUI_LSP")
+	}
+	_ = os.Chdir(dir)
+	// a clean home: default settings and a plain prompt, but the real Go caches for gopls
+	for _, k := range []string{"GOCACHE", "GOPATH", "GOMODCACHE"} {
+		if v, err := exec.Command("go", "env", k).Output(); err == nil {
+			t.Setenv(k, strings.TrimSpace(string(v)))
+		}
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	_ = os.WriteFile(filepath.Join(home, ".bashrc"), []byte("PS1='\\[\\e[32m\\]dev@box\\[\\e[0m\\]:\\[\\e[34m\\]\\W\\[\\e[0m\\]$ '\n"), 0o644)
+	t.Setenv("SHELL", "/bin/bash")
+	h := newHarness(t, 170, 46, Options{Paths: []string{dir}})
+	h.a.closeAllEditors()
+	h.a.OpenFile(filepath.Join(dir, "geometry", "shapes.go"), false)
+	h.a.splitEditor()
+	v := h.a.OpenFile(filepath.Join(dir, "geometry", "shapes_test.go"), false)
+	for i := 0; i < 100 && (v.doc.semSpans == nil || len(v.lenses) == 0 && false); i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.a.explorer.reveal(filepath.Join(dir, "geometry", "shapes_test.go"), false)
+	h.a.RunCommand("testing.runCurrentFile", nil)
+	for i := 0; i < 300 && h.a.testing.running != nil; i++ {
+		time.Sleep(50 * time.Millisecond)
+		h.flush()
+	}
+	for len(h.a.notifications) > 0 {
+		h.a.dismissNotification(h.a.notifications[0])
+	}
+	h.a.showPanel("terminal")
+	h.a.panelHeight = 12
+	ti := h.a.terminals.current()
+	time.Sleep(500 * time.Millisecond)
+	ti.t.WriteInput([]byte("go vet ./... && git status --short\r"))
+	time.Sleep(1500 * time.Millisecond)
+	h.a.activeGroup = 1
+	v.SetCursor(buffer.Pos{Line: 20, Col: 10})
+	h.a.focusEditor()
+	h.settle()
+	h.snapshot(filepath.Join(out, "hero.json"))
+	h.a.terminals.closeAll()
+	h.a.lsp.ShutdownAll()
 }

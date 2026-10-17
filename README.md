@@ -3,7 +3,7 @@
 Visual Studio Code, but it lives in your terminal. Same layout, same shortcuts, same themes, same muscle memory. No Electron was harmed in the making of this editor.
 
 ![tuicode](docs/screenshot.png)
-<sup>tuicode with gopls, Dark Modern and the Seti file icons</sup>
+<sup>Go with gopls in a split editor: test results in the gutter, run/debug lenses, git decorations and the integrated terminal with shell integration</sup>
 
 ## Key Features
 
