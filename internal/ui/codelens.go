@@ -32,12 +32,45 @@ func (v *EditorView) lensRows(line int) int {
 	if v.doc.conflictStarts[line] && v.app.settings.Bool("merge-conflict.codeLens.enabled", "") {
 		return 1
 	}
+	if v.testLensesEnabled() {
+		if _, ok := v.doc.testsInDoc()[line]; ok {
+			return 1
+		}
+	}
 	return 0
+}
+
+// testLensesEnabled mirrors the Go extension's "go.enableCodeLens": {"runtest": true}.
+func (v *EditorView) testLensesEnabled() bool {
+	if v.lang() != "go" {
+		return false
+	}
+	m, ok := v.app.settings.Get("go.enableCodeLens", "go").(map[string]any)
+	if !ok {
+		return true
+	}
+	on, ok := m["runtest"].(bool)
+	return !ok || on
+}
+
+// testLenses returns "run test | debug test" above a Go test function.
+func (v *EditorView) testLenses(line int) []*codeLens {
+	if !v.testLensesEnabled() {
+		return nil
+	}
+	if _, ok := v.doc.testsInDoc()[line]; !ok {
+		return nil
+	}
+	a := v.app
+	return []*codeLens{
+		{line: line, command: &lsp.Command{Title: "run test"}, run: func() { a.runTests([]*testCase{a.testAt(v.doc, line)}) }},
+		{line: line, command: &lsp.Command{Title: "debug test"}, run: func() { a.debugTest(a.testAt(v.doc, line)) }},
+	}
 }
 
 // hasLenses reports whether any lens rows may exist, so row math can't take its fast path.
 func (v *EditorView) hasLenses() bool {
-	return len(v.lenses) > 0 || len(v.doc.mergeConflicts()) > 0
+	return len(v.lenses) > 0 || len(v.doc.mergeConflicts()) > 0 || v.testLensesEnabled() && len(v.doc.testsInDoc()) > 0
 }
 
 // setLenses replaces the code lenses, showing the first line's lens when scrolled to the top.
@@ -53,6 +86,7 @@ func (v *EditorView) setLenses(m map[int][]*codeLens) {
 // lensTitles returns the visible lens titles on a line.
 func (v *EditorView) lensTitles(line int) []*codeLens {
 	out := v.conflictLenses(line)
+	out = append(out, v.testLenses(line)...)
 	for _, l := range v.lenses[line] {
 		if l.command != nil && l.command.Title != "" {
 			out = append(out, l)

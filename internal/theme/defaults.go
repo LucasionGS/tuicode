@@ -302,6 +302,12 @@ var darkDefaults = map[string]string{
 	"terminalCommandDecoration.defaultBackground": "#FFFFFF40",
 	"terminalCommandDecoration.successBackground": "#1B81A8",
 	"terminalCommandDecoration.errorBackground":   "#F14C4C",
+	"testing.iconPassed":                          "#73C991",
+	"testing.iconFailed":                          "#F14C4C",
+	"testing.iconQueued":                          "#CCA700",
+	"testing.iconSkipped":                         "#848484",
+	"testing.iconUnset":                           "#848484",
+	"testing.runAction":                           "#73C991",
 	// merge conflicts
 	"merge.currentHeaderBackground":   "#40C8AE80",
 	"merge.currentContentBackground":  "#40C8AE33",

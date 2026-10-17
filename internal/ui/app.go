@@ -136,6 +136,7 @@ type App struct {
 	outline   *OutlineView
 	hierView  *HierarchyView
 	ports     *PortsView
+	testing   *TestingView
 	extView   *ExtensionsView
 	terminals *TerminalPanel
 	problems  *ProblemsPanel
@@ -281,6 +282,7 @@ func New(opts Options) (*App, error) {
 	a.outline = newOutlineView(a)
 	a.hierView = newHierarchyView(a)
 	a.ports = newPortsView(a)
+	a.testing = newTestingView(a)
 	a.extView = newExtensionsView(a)
 	a.terminals = newTerminalPanel(a)
 	a.problems = newProblemsPanel(a)

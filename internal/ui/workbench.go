@@ -281,6 +281,7 @@ var activityItems = []activityItem{
 	{"scm", IcoSCM, "Source Control (Ctrl+Shift+G)", "workbench.view.scm"},
 	{"debug", IcoDebug, "Run and Debug (Ctrl+Shift+D)", "workbench.view.debug"},
 	{"extensions", IcoExtensions, "Language Servers (Ctrl+Shift+X)", "workbench.view.extensions"},
+	{"testing", IcoBeaker, "Testing", "workbench.view.testing"},
 }
 
 func (a *App) drawActivityBar() {
@@ -620,6 +621,8 @@ func (a *App) drawSidebar() {
 		title = "RUN AND DEBUG"
 	case "hierarchy":
 		title = a.hierView.title()
+	case "testing":
+		title = "TESTING"
 	}
 	tst := styleFB(th.C("sideBarTitle.foreground"), bgc)
 	// the sash sits on the edge next to the editor
@@ -648,6 +651,9 @@ func (a *App) drawSidebar() {
 	case "hierarchy":
 		a.hierView.drawActions(Rect{inner.X, r.Y, inner.W, 1})
 		a.hierView.draw(body)
+	case "testing":
+		a.testing.drawActions(Rect{inner.X, r.Y, inner.W, 1})
+		a.testing.draw(body)
 	}
 	a.cv.clip = r
 	// sash on the right edge
@@ -704,6 +710,8 @@ func (a *App) sidebarHandleKey(key, text string, isText bool) bool {
 		return a.debugView.handleKey(key, text, isText)
 	case "hierarchy":
 		return a.hierView.handleKey(key, text, isText)
+	case "testing":
+		return a.testing.handleKey(key)
 	}
 	return false
 }

@@ -319,8 +319,19 @@ func (v *EditorView) draw(r Rect, focused bool) {
 					glyph = '◆'
 				}
 				a.cv.Set(r.X, y, glyph, styleFB(col, glyphBg))
+			} else if t := a.testAt(v.doc, line); t != nil && !(a.mouseX == r.X && a.mouseY == y) {
+				// test functions show their last result, or a run button
+				icon, key := a.statusIcon(t.status)
+				if t.status == testUnknown {
+					icon, key = a.Icon(IcoPlay), "testing.runAction"
+				}
+				a.cv.Text(r.X, y, r.X+1, icon, styleFB(th.C(key), glyphBg))
 			} else if a.mouseX == r.X && a.mouseY == y {
-				a.cv.Set(r.X, y, '●', styleFB(th.OverColor("debugIcon.breakpointForeground", glyphBg), glyphBg).Dim(true))
+				if a.testAt(v.doc, line) != nil {
+					a.cv.Text(r.X, y, r.X+1, a.Icon(IcoPlay), styleFB(th.C("testing.runAction"), glyphBg))
+				} else {
+					a.cv.Set(r.X, y, '●', styleFB(th.OverColor("debugIcon.breakpointForeground", glyphBg), glyphBg).Dim(true))
+				}
 			}
 			if f := a.currentFrameLine(v); f == line {
 				a.cv.Set(r.X, y, '➜', styleFB(th.C("debugIcon.breakpointCurrentStackframeForeground"), glyphBg))
@@ -339,6 +350,17 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		foldX := gx
 		lineNo := line
 		a.addHit(Rect{r.X, y, v.gutterW, 1}, func(ev MouseEvent) bool {
+			if ev.Kind == MousePress && ev.X == v.full.X && v.buf().Path != "" && a.breakpointAt(v.buf().Path, lineNo) == nil {
+				if t := a.testAt(v.doc, lineNo); t != nil {
+					// the test icon runs the test; right click offers debugging
+					if ev.Button == tcell.Button2 {
+						a.openContextMenu(ev.X+1, ev.Y, a.testing.rowMenu(testRow{dir: t.dir, test: t}))
+					} else {
+						a.runTests([]*testCase{t})
+					}
+					return true
+				}
+			}
 			if ev.Kind == MousePress && ev.X == v.full.X && ev.Button == tcell.Button1 && v.buf().Path != "" {
 				a.toggleBreakpoint(v.buf().Path, lineNo)
 				return true
