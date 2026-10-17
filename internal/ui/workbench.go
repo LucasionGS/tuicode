@@ -885,15 +885,25 @@ func (a *App) drawEditorArea() {
 
 //#endregion
 
-// keyLabel returns the display string of the first keybinding for a command.
+// keyLabel returns the display string of the primary keybinding for a command:
+// the newest user binding, otherwise the first default one.
 func (a *App) keyLabel(cmd string) string {
-	for i := len(a.bindings) - 1; i >= 0; i-- {
-		b := a.bindings[i]
-		if b.Command == cmd {
-			return config.FormatKey(b.Keys)
+	if a.keyLabels == nil {
+		a.keyLabels = map[string]string{}
+		for _, b := range a.bindings {
+			if b.Source == "default" {
+				if _, ok := a.keyLabels[b.Command]; !ok {
+					a.keyLabels[b.Command] = config.FormatKey(b.Keys)
+				}
+			}
+		}
+		for _, b := range a.bindings {
+			if b.Source != "default" {
+				a.keyLabels[b.Command] = config.FormatKey(b.Keys)
+			}
 		}
 	}
-	return ""
+	return a.keyLabels[cmd]
 }
 
 func repeatStr(s string, n int) string {

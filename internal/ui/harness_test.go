@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -94,4 +96,45 @@ func TestStartupDump(t *testing.T) {
 	}
 	h := newHarness(t, 140, 40, Options{Paths: []string{"app.go"}})
 	h.dump()
+}
+
+// snapshot writes the screen as JSON for the PNG renderer in the scratchpad.
+func (h *harness) snapshot(path string) {
+	cells, w, ht := h.s.GetContents()
+	type cj struct {
+		R  string `json:"r"`
+		FG string `json:"fg"`
+		BG string `json:"bg"`
+		B  bool   `json:"b,omitempty"`
+		I  bool   `json:"i,omitempty"`
+		U  bool   `json:"u,omitempty"`
+		S  bool   `json:"s,omitempty"`
+	}
+	hex := func(c tcell.Color) string {
+		r, g, b := c.RGB()
+		if r < 0 {
+			return ""
+		}
+		return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+	}
+	out := struct {
+		W, H   int
+		Cells  []cj
+		CX, CY int
+	}{W: w, H: ht}
+	for _, c := range cells {
+		fg, bg, attr := c.Style.Decompose()
+		r := " "
+		if len(c.Runes) > 0 {
+			r = string(c.Runes)
+		}
+		out.Cells = append(out.Cells, cj{R: r, FG: hex(fg), BG: hex(bg), B: attr&tcell.AttrBold != 0, I: attr&tcell.AttrItalic != 0, U: c.Style.GetUnderlineStyle() != tcell.UnderlineStyleNone, S: attr&tcell.AttrStrikeThrough != 0})
+	}
+	if h.a.cursor.visible {
+		out.CX, out.CY = h.a.cursor.x, h.a.cursor.y
+	} else {
+		out.CX, out.CY = -1, -1
+	}
+	data, _ := json.Marshal(out)
+	_ = os.WriteFile(path, data, 0o644)
 }

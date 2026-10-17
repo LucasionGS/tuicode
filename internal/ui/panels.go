@@ -133,6 +133,7 @@ func (p *ProblemsPanel) handleKey(key string) bool {
 }
 
 func (p *ProblemsPanel) draw(r Rect) {
+	mark := len(p.app.hits)
 	a := p.app
 	th := a.theme
 	p.rect = r
@@ -234,7 +235,7 @@ func (p *ProblemsPanel) draw(r Rect) {
 			return true
 		})
 	}
-	a.addHit(r, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, r, func(ev MouseEvent) bool {
 		if ev.Kind == MouseWheel {
 			p.scroll = clampInt(p.scroll+ev.WheelDY*3, 0, max(len(p.rows)-h, 0))
 		}

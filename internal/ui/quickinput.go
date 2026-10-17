@@ -244,6 +244,7 @@ func (q *QuickInput) maxRows() int {
 }
 
 func (q *QuickInput) draw() {
+	mark := len(q.app.hits)
 	a := q.app
 	th := a.theme
 	w := clampInt(a.width*6/10, min(60, a.width-2), 110)
@@ -395,7 +396,7 @@ func (q *QuickInput) draw() {
 			a.cv.Set(sx, cy, ch, cst.Background(blendTcell(bgOf(cst), shadow)))
 		}
 	}
-	a.addHit(q.rect, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, q.rect, func(ev MouseEvent) bool {
 		if ev.Kind == MouseWheel {
 			q.scroll = clampInt(q.scroll+ev.WheelDY, 0, max(len(q.filtered)-rows, 0))
 		}

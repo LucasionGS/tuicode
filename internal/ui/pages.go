@@ -197,10 +197,7 @@ func (w *WelcomePage) Draw(r Rect) {
 	cy := r.Y + r.H - 2
 	if cy > ly+1 {
 		show := a.settings.String("workbench.startupEditor", "") == "welcomePage"
-		box := "☐"
-		if show {
-			box = "☑"
-		}
+		box := a.checkbox(show)
 		end := a.cv.Text(x, cy, r.X+r.W, box+" Show welcome page on startup", base)
 		a.addHit(Rect{x, cy, end - x, 1}, func(ev MouseEvent) bool {
 			if ev.Kind == MousePress {
@@ -415,6 +412,7 @@ func (p *KeybindingsPage) saveBinding(cmd, keys string) {
 
 // Draw implements SpecialPage.
 func (p *KeybindingsPage) Draw(r Rect) {
+	mark := len(p.app.hits)
 	a := p.app
 	th := a.theme
 	bgc := th.C("editor.background")
@@ -483,7 +481,7 @@ func (p *KeybindingsPage) Draw(r Rect) {
 			return true
 		})
 	}
-	a.addHit(Rect{r.X, hy, r.W, h + 1}, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, Rect{r.X, hy, r.W, h + 1}, func(ev MouseEvent) bool {
 		if ev.Kind == MouseWheel {
 			p.scroll = clampInt(p.scroll+ev.WheelDY*3, 0, max(len(p.rows)-h, 0))
 		}
@@ -701,6 +699,7 @@ func (p *SettingsPage) HandleKey(key, text string, isText bool) bool {
 
 // Draw implements SpecialPage.
 func (p *SettingsPage) Draw(r Rect) {
+	mark := len(p.app.hits)
 	a := p.app
 	th := a.theme
 	bgc := th.C("editor.background")
@@ -747,9 +746,9 @@ func (p *SettingsPage) Draw(r Rect) {
 		switch v := val.(type) {
 		case bool:
 			if v {
-				vs = "☑ enabled"
+				vs = a.checkbox(true) + " enabled"
 			} else {
-				vs = "☐ disabled"
+				vs = a.checkbox(false) + " disabled"
 			}
 		case string:
 			vs = fmt.Sprintf("%q", v)
@@ -777,7 +776,7 @@ func (p *SettingsPage) Draw(r Rect) {
 			return true
 		})
 	}
-	a.addHit(Rect{r.X, y, r.W, r.H - (y - r.Y)}, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, Rect{r.X, y, r.W, r.H - (y - r.Y)}, func(ev MouseEvent) bool {
 		if ev.Kind == MouseWheel {
 			p.scroll = clampInt(p.scroll+ev.WheelDY, 0, max(len(p.keys)-h, 0))
 		}
@@ -865,3 +864,17 @@ func (m *MarkdownPreview) Draw(r Rect) {
 }
 
 //#endregion
+
+// checkbox returns a checkbox glyph.
+func (a *App) checkbox(on bool) string {
+	if a.nerdIcons {
+		if on {
+			return "\U000f0135"
+		}
+		return "\U000f0131"
+	}
+	if on {
+		return "[x]"
+	}
+	return "[ ]"
+}

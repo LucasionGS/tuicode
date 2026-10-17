@@ -194,6 +194,7 @@ type App struct {
 	findHistory         []string
 	state               *stateFile
 	fileIdx             *fileIndex
+	keyLabels           map[string]string
 }
 
 type navEntry struct {
@@ -247,7 +248,7 @@ func New(opts Options) (*App, error) {
 		}
 	}
 	if a.root == "" && len(files) > 0 {
-		a.root = filepath.Dir(files[0])
+		a.root = guessRoot(files[0])
 	}
 	a.loadSettings()
 	a.registerCommands()
@@ -300,6 +301,26 @@ func New(opts Options) (*App, error) {
 	return a, nil
 }
 
+// guessRoot picks a workspace folder for a file: the current directory when the
+// file is inside it, else the nearest repository or module root, else its folder.
+func guessRoot(file string) string {
+	if wd, err := os.Getwd(); err == nil && strings.HasPrefix(file, wd+string(filepath.Separator)) {
+		home, _ := os.UserHomeDir()
+		if wd != home && wd != "/" {
+			return wd
+		}
+	}
+	dir := filepath.Dir(file)
+	for d := dir; d != "/" && d != "."; d = filepath.Dir(d) {
+		for _, marker := range []string{".git", "go.mod", "package.json", "deno.json", "Cargo.toml", "pubspec.yaml"} {
+			if _, err := os.Stat(filepath.Join(d, marker)); err == nil {
+				return d
+			}
+		}
+	}
+	return dir
+}
+
 func (a *App) loadSettings() {
 	a.settings = config.LoadSettings(a.root)
 	a.applySettings()
@@ -330,6 +351,7 @@ func (a *App) applySettings() {
 	importKB := a.settings.Bool("tuicode.importVSCodeKeybindings", "")
 	binds, errs := config.LoadKeybindings(a.defaultBindings(), importKB)
 	a.bindings = binds
+	a.keyLabels = nil
 	for _, e := range errs {
 		a.settingsErrors(e)
 	}
@@ -1348,4 +1370,21 @@ func (a *App) attachScreen(s tcell.Screen) {
 	a.screen = s
 	a.cv = &Canvas{s: s}
 	a.width, a.height = s.Size()
+}
+
+// hitMark returns the current hit stack position, for addHitUnder.
+func (a *App) hitMark() int { return len(a.hits) }
+
+// addHitUnder registers a container region below the hits added after mark,
+// so rows drawn inside it keep priority.
+func (a *App) addHitUnder(mark int, r Rect, h func(ev MouseEvent) bool) {
+	if r.Empty() {
+		return
+	}
+	if mark > len(a.hits) {
+		mark = len(a.hits)
+	}
+	a.hits = append(a.hits, hit{})
+	copy(a.hits[mark+1:], a.hits[mark:])
+	a.hits[mark] = hit{r: r, handler: h}
 }

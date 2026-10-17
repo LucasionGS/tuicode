@@ -113,6 +113,7 @@ func (a *App) drawNotifications() {
 			break
 		}
 		r := Rect{x, top, w, h}
+		toastMark := a.hitMark()
 		a.cv.Fill(r, ' ', base)
 		icon, key := a.Icon(IcoInfo), "notificationsInfoIcon.foreground"
 		switch n.Level {
@@ -158,7 +159,7 @@ func (a *App) drawNotifications() {
 				bx--
 			}
 		}
-		a.addHit(r, func(ev MouseEvent) bool {
+		a.addHitUnder(toastMark, r, func(ev MouseEvent) bool {
 			if ev.Kind == MousePress {
 				nn.created = time.Now()
 				nn.sticky = true

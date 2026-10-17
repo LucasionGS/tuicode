@@ -274,7 +274,7 @@ var defaultKeymap = [][3]string{
 	{"ctrl+pageup", "workbench.action.terminal.focusPrevious", "terminalFocus"},
 	{"ctrl+pagedown", "workbench.action.terminal.focusNext", "terminalFocus"},
 	{"ctrl+shift+a", "workbench.action.terminal.selectAll", "terminalFocus"},
-	{"ctrl+shift+f", "workbench.action.terminal.focusFind", "terminalFocus"},
+	{"ctrl+f", "workbench.action.terminal.focusFind", "terminalFocus"},
 	{"ctrl+k", "workbench.action.terminal.clear", "terminalFocus && config.tuicode.terminalCtrlKClear"},
 
 	// Tasks

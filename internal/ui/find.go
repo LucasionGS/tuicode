@@ -218,7 +218,8 @@ func (f *FindWidget) selectCurrent() {
 	v := f.v
 	m := f.matches[f.current]
 	v.SetSelections([]buffer.Selection{{Anchor: m.Start, Active: m.End}}, 0)
-	v.ensurePosVisible(m.Start, false)
+	_, _, visible := v.screenPos(m.Start)
+	v.ensurePosVisible(m.Start, !visible)
 	// keep the match out from under the widget
 	if _, y, ok := v.screenPos(m.Start); ok && y < v.rect.Y+3 && f.visible {
 		v.ScrollBy(-3)

@@ -168,6 +168,13 @@ var Defaults = map[string]any{
 	"tuicode.mouse":                              true,
 	"tuicode.titleBar":                           true,
 	"tuicode.truecolor":                          "auto",
+	"tuicode.icons":                              "auto",
+	// language defaults contributed by VS Code and its common extensions
+	"[go]":         map[string]any{"editor.insertSpaces": false, "editor.tabSize": 4.0},
+	"[makefile]":   map[string]any{"editor.insertSpaces": false},
+	"[markdown]":   map[string]any{"editor.wordWrap": "on", "editor.quickSuggestions": false},
+	"[git-commit]": map[string]any{"editor.rulers": []any{72.0}},
+	"[plaintext]":  map[string]any{"editor.quickSuggestions": false},
 }
 
 // Settings is a layered view over default, imported, user and workspace settings.

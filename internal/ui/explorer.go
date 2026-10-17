@@ -834,6 +834,7 @@ func (e *Explorer) drawActions(r Rect) {
 }
 
 func (e *Explorer) draw(r Rect) {
+	mark := len(e.app.hits)
 	a := e.app
 	th := a.theme
 	e.rect = r
@@ -1023,7 +1024,7 @@ func (e *Explorer) draw(r Rect) {
 			return true
 		})
 	}
-	a.addHit(body, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, body, func(ev MouseEvent) bool {
 		switch ev.Kind {
 		case MouseWheel:
 			e.scroll = clampInt(e.scroll+ev.WheelDY*3, 0, max(len(e.rows)-h, 0))

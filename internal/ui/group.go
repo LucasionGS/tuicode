@@ -148,8 +148,9 @@ func (g *EditorGroup) draw(r Rect, focused bool) {
 	th := a.theme
 	if len(g.tabs) == 0 {
 		g.tabsRect = Rect{}
+		wmMark := a.hitMark()
 		a.drawWatermark(r)
-		a.addHit(r, func(ev MouseEvent) bool {
+		a.addHitUnder(wmMark, r, func(ev MouseEvent) bool {
 			if ev.Kind == MousePress {
 				a.activeGroup = a.groupIndex(g)
 				a.focusEditor()

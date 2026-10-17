@@ -93,14 +93,11 @@ func (a *App) detectLanguage(path, first string) *syntax.Language {
 
 func (a *App) applyEditorSettings(d *Document) {
 	lang := d.Lang.ID
-	if !a.settings.Bool("editor.detectIndentation", lang) || d.Buf.LineCount() <= 1 {
-		d.Buf.TabSize = a.settings.Int("editor.tabSize", lang, 4)
-		d.Buf.InsertSpaces = a.settings.Bool("editor.insertSpaces", lang)
-		return
-	}
-	// keep detected values but use the configured tab size when only tabs were found
-	if !d.Buf.InsertSpaces {
-		d.Buf.TabSize = a.settings.Int("editor.tabSize", lang, 4)
+	d.Buf.TabSize = a.settings.Int("editor.tabSize", lang, 4)
+	d.Buf.InsertSpaces = a.settings.Bool("editor.insertSpaces", lang)
+	if a.settings.Bool("editor.detectIndentation", lang) {
+		// detection only overrides when the content has indentation
+		d.Buf.DetectIndentation()
 	}
 }
 

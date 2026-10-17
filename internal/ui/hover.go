@@ -141,11 +141,15 @@ func renderMarkdown(a *App, md string, width int, defaultLang string) []mdLine {
 			continue
 		}
 		if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+			// separators replace surrounding blank lines
+			for len(out) > 0 && len(out[len(out)-1].segs) == 0 && !out[len(out)-1].hr {
+				out = out[:len(out)-1]
+			}
 			out = append(out, mdLine{hr: true})
 			continue
 		}
 		if trimmed == "" {
-			if len(out) > 0 && !(len(out[len(out)-1].segs) == 0 && !out[len(out)-1].hr) {
+			if len(out) > 0 && len(out[len(out)-1].segs) > 0 {
 				out = append(out, mdLine{})
 			}
 			continue

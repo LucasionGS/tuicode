@@ -695,6 +695,7 @@ func (s *SCMView) drawActions(r Rect) {
 }
 
 func (s *SCMView) draw(r Rect) {
+	mark := len(s.app.hits)
 	a := s.app
 	th := a.theme
 	s.rect = r
@@ -969,7 +970,7 @@ func (s *SCMView) draw(r Rect) {
 			return true
 		})
 	}
-	a.addHit(list, func(ev MouseEvent) bool {
+	a.addHitUnder(mark, list, func(ev MouseEvent) bool {
 		if ev.Kind == MouseWheel {
 			s.scroll = clampInt(s.scroll+ev.WheelDY*3, 0, max(len(s.rows)-h, 0))
 		}

@@ -463,6 +463,7 @@ func (m *ContextMenu) draw() {
 		y = max(a.height-h, 0)
 	}
 	m.rect = Rect{x, y, w, min(h, a.height)}
+	mark := a.hitMark()
 	a.cv.clip = Rect{0, 0, a.width, a.height}
 	bgc := th.C("menu.background")
 	fgc := th.C("menu.foreground")
@@ -513,10 +514,6 @@ func (m *ContextMenu) draw() {
 		idx := i
 		a.addHit(Rect{x + 1, ry, w - 2, 1}, func(ev MouseEvent) bool {
 			switch ev.Kind {
-			case MouseRelease:
-				if m.selected == idx && m.app.clickCount > 0 && len(m.items[idx].Submenu) == 0 {
-					m.activate(idx)
-				}
 			case MousePress:
 				m.selected = idx
 				m.activate(idx)
@@ -533,7 +530,7 @@ func (m *ContextMenu) draw() {
 			return true
 		})
 	}
-	a.addHit(m.rect, func(ev MouseEvent) bool { return true })
+	a.addHitUnder(mark, m.rect, func(ev MouseEvent) bool { return true })
 	if m.child != nil {
 		m.child.draw()
 	}
