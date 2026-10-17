@@ -944,7 +944,7 @@ func (s *SCMView) draw(r Rect) {
 					items = append(items, MenuItem{Separator: true},
 						MenuItem{Label: "Add to .gitignore", Run: func() {
 							gi := filepath.Join(a.gitRoot, ".gitignore")
-							fh, err := os.OpenFile(gi, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+							fh, err := fsOpenFile(gi, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 							if err == nil {
 								_, _ = fh.WriteString("\n" + f.Path + "\n")
 								fh.Close()

@@ -1210,7 +1210,7 @@ func (tp *TerminalPanel) openLinkAt(ti *TermInstance, r Rect, x, y int) bool {
 	}
 	word := strings.TrimRight(sb.String(), ".")
 	if strings.HasPrefix(word, "http://") || strings.HasPrefix(word, "https://") {
-		_ = exec.Command("xdg-open", word).Start()
+		openExternal(word)
 		a.setStatusMessage("Opening " + word)
 		return true
 	}

@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -187,7 +186,7 @@ func (a *App) registerCommands() {
 	}))
 	a.cmd("workbench.action.files.revealActiveFileInWindows", "File", "Reveal Active File in File Manager", a.ed(func(v *EditorView) {
 		if v.buf().Path != "" {
-			_ = exec.Command("xdg-open", filepath.Dir(v.buf().Path)).Start()
+			openExternal(filepath.Dir(v.buf().Path))
 		}
 	}))
 	a.cmd("workbench.files.action.showActiveFileInExplorer", "File", "Reveal Active File in Explorer View", a.ed(func(v *EditorView) {
@@ -691,8 +690,8 @@ func (a *App) registerCommands() {
 		if a.root != "" {
 			p := filepath.Join(a.root, ".vscode", "settings.json")
 			if _, err := os.Stat(p); err != nil {
-				_ = os.MkdirAll(filepath.Dir(p), 0o755)
-				_ = os.WriteFile(p, []byte("{\n}\n"), 0o644)
+				_ = fsMkdirAll(filepath.Dir(p), 0o755)
+				_ = fsWriteFile(p, []byte("{\n}\n"), 0o644)
 			}
 			a.OpenFile(p, false)
 		}

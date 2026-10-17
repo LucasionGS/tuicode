@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 	"tuicode/internal/buffer"
+	"tuicode/internal/theme"
 )
 
 // TestScreenshot writes snapshots when TUI_SHOT is set to an output folder.
@@ -100,4 +101,48 @@ func TestScreenshotLSP(t *testing.T) {
 	h.settle()
 	h.snapshot(filepath.Join(out, "lsp.json"))
 	h.a.lsp.ShutdownAll()
+}
+
+func TestScreenshotPages(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" {
+		t.Skip("set TUI_SHOT")
+	}
+	wd, _ := os.Getwd()
+	root := filepath.Dir(filepath.Dir(wd))
+	t.Setenv("HOME", t.TempDir())
+	_ = os.Chdir(root)
+	defer os.Chdir(wd)
+	h := newHarness(t, 150, 42, Options{Paths: []string{root}})
+	h.a.RunCommand("workbench.action.openSettings", nil)
+	h.typeText("minimap")
+	h.settle()
+	h.snapshot(filepath.Join(out, "settings.json"))
+	h.a.RunCommand("workbench.action.openGlobalKeybindings", nil)
+	h.typeText("comment")
+	h.settle()
+	h.snapshot(filepath.Join(out, "keybindings.json"))
+	h.a.closeAllEditors()
+	h.a.OpenFile(filepath.Join(root, "internal/ui/app.go"), false)
+	h.settle()
+	v := h.a.ActiveView()
+	v.SetCursor(buffer.Pos{Line: 300})
+	v.ensurePosVisible(v.Cursor(), true)
+	h.a.RunCommand("workbench.action.splitEditor", nil)
+	h.a.OpenFile(filepath.Join(root, "internal/ui/keymap.go"), false)
+	h.settle()
+	h.snapshot(filepath.Join(out, "split.json"))
+	h.a.joinAllGroups()
+	left := "package main\n\nfunc a() {\n\tprintln(1)\n\tprintln(2)\n}\n\nfunc b() {}\n"
+	right := "package main\n\nfunc a() {\n\tprintln(1)\n\tprintln(3)\n\tprintln(4)\n}\n\nfunc c() {}\n"
+	h.a.openDiffPage("x.go ↔ y.go", filepath.Join(root, "x.go"), left, right)
+	h.settle()
+	h.snapshot(filepath.Join(out, "diff.json"))
+	h.a.closeAllEditors()
+	h.a.OpenFile(filepath.Join(root, "internal/ui/app.go"), false)
+	th, _ := theme.Load("Light Modern")
+	h.a.theme = th
+	h.a.showPanel("problems")
+	h.settle()
+	h.snapshot(filepath.Join(out, "light.json"))
 }

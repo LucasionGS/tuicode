@@ -42,21 +42,21 @@ func (a *App) setClipboard(text string) {
 	a.clipboardText = text
 	a.clipboardFullLine = false
 	a.clipboardParts = nil
-	if clipTools != nil {
+	if clipTools != nil && sandboxRoot == "" {
 		cmd := exec.Command(clipTools.copy[0], clipTools.copy[1:]...)
 		cmd.Stdin = strings.NewReader(text)
 		if err := cmd.Start(); err == nil {
 			go func() { _ = cmd.Wait() }()
 		}
 	}
-	if (clipTools == nil || os.Getenv("SSH_TTY") != "") && a.screen != nil {
+	if (clipTools == nil || os.Getenv("SSH_TTY") != "") && a.screen != nil && sandboxRoot == "" {
 		a.screen.SetClipboard([]byte(text))
 	}
 }
 
 // getClipboard returns the clipboard text.
 func (a *App) getClipboard() string {
-	if clipTools != nil {
+	if clipTools != nil && sandboxRoot == "" {
 		cmd := exec.Command(clipTools.paste[0], clipTools.paste[1:]...)
 		var out bytes.Buffer
 		cmd.Stdout = &out

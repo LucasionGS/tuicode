@@ -91,6 +91,10 @@ func (a *App) NewUntitled() *EditorView {
 }
 
 func (a *App) openFolder(path string) {
+	if err := checkSandbox(path); err != nil {
+		a.notify(NotifyError, err.Error())
+		return
+	}
 	a.saveSessionSafe()
 	a.closeAllEditors()
 	a.root = path
@@ -820,8 +824,8 @@ func (a *App) writeState() {
 	if err != nil {
 		return
 	}
-	_ = os.MkdirAll(config.Dir(), 0o755)
-	_ = os.WriteFile(statePath(), data, 0o644)
+	_ = fsMkdirAll(config.Dir(), 0o755)
+	_ = fsWriteFile(statePath(), data, 0o644)
 }
 
 func (a *App) addRecentFile(path string) {
@@ -1051,10 +1055,10 @@ func (a *App) writeBackups(dirty []*Document) error {
 		return err
 	}
 	p := a.backupPath()
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+	if err := fsMkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(p, data, 0o600)
+	return fsWriteFile(p, data, 0o600)
 }
 
 // restoreBackups reopens unsaved documents from the last session.

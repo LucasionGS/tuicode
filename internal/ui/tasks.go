@@ -294,8 +294,8 @@ func (a *App) runTaskPicker(group string) {
 		a.notify(NotifyInfo, "No tasks found. Create .vscode/tasks.json to define tasks.", NotifyAction{Label: "Create tasks.json", Run: func() {
 			p := filepath.Join(a.root, ".vscode", "tasks.json")
 			if !fileExists(p) {
-				_ = os.MkdirAll(filepath.Dir(p), 0o755)
-				_ = os.WriteFile(p, []byte(tasksTemplate), 0o644)
+				_ = fsMkdirAll(filepath.Dir(p), 0o755)
+				_ = fsWriteFile(p, []byte(tasksTemplate), 0o644)
 			}
 			a.OpenFile(p, false)
 		}})

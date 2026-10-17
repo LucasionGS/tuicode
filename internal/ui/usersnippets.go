@@ -188,8 +188,8 @@ func (a *App) configureSnippets() {
 		}
 		p := it.Data.(string)
 		if !fileExists(p) {
-			_ = os.MkdirAll(filepath.Dir(p), 0o755)
-			_ = os.WriteFile(p, []byte(snippetTemplate), 0o644)
+			_ = fsMkdirAll(filepath.Dir(p), 0o755)
+			_ = fsWriteFile(p, []byte(snippetTemplate), 0o644)
 		}
 		a.OpenFile(p, false)
 		a.focusEditor()

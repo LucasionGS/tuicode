@@ -20,7 +20,12 @@ func tempWorkspace(t *testing.T, files map[string]string) string {
 			t.Fatal(err)
 		}
 	}
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// confine every write, git call and external program to the test folders
+	resolved, _ := filepath.EvalSymlinks(filepath.Dir(dir))
+	setSandbox(resolved)
+	t.Cleanup(func() { setSandbox("") })
 	return dir
 }
 

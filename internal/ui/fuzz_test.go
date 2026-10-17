@@ -23,7 +23,14 @@ func TestRandomInput(t *testing.T) {
 		"data/x.json": "{\"a\": [1, 2, {\"b\": null}]}\n",
 		"wide/日本.txt": "日本語のテキスト\nemoji 😀 here\n\tTabbed\n",
 	})
-	t.Setenv("SHELL", "/bin/sh")
+	// random keys must never reach a real shell or real files
+	t.Setenv("SHELL", "/bin/cat")
+	wd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	defer os.Chdir(wd)
+	resolved, _ := filepath.EvalSymlinks(dir)
+	setSandbox(resolved)
+	defer setSandbox("")
 	h := newHarness(t, 100, 30, Options{Paths: []string{dir}})
 	h.a.OpenFile(filepath.Join(dir, "main.go"), false)
 	seed := int64(len(dir))

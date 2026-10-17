@@ -580,10 +580,10 @@ func (e *Explorer) commitEdit() {
 			e.rebuild()
 			return
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := fsMkdirAll(filepath.Dir(target), 0o755); err != nil {
 			a.notify(NotifyError, err.Error())
 		}
-		if err := os.Rename(ed.rename, target); err != nil {
+		if err := fsRename(ed.rename, target); err != nil {
 			a.notify(NotifyError, "Unable to rename: "+err.Error())
 		} else {
 			a.onFileRenamed(ed.rename, target)
@@ -598,15 +598,15 @@ func (e *Explorer) commitEdit() {
 		return
 	}
 	if ed.isDir || strings.HasSuffix(name, "/") {
-		if err := os.MkdirAll(target, 0o755); err != nil {
+		if err := fsMkdirAll(target, 0o755); err != nil {
 			a.notify(NotifyError, err.Error())
 		}
 		e.expanded[target] = true
 	} else {
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := fsMkdirAll(filepath.Dir(target), 0o755); err != nil {
 			a.notify(NotifyError, err.Error())
 		}
-		if err := os.WriteFile(target, nil, 0o644); err != nil {
+		if err := fsWriteFile(target, nil, 0o644); err != nil {
 			a.notify(NotifyError, err.Error())
 		} else {
 			a.OpenFile(target, false)
@@ -660,7 +660,7 @@ func (e *Explorer) deleteSelected(permanent bool) {
 		if trash {
 			err = moveToTrash(n.path)
 		} else {
-			err = os.RemoveAll(n.path)
+			err = fsRemoveAll(n.path)
 		}
 		if err != nil {
 			a.notify(NotifyError, "Failed to delete '"+n.name+"': "+err.Error())
@@ -703,6 +703,9 @@ func hasTrash() bool {
 }
 
 func moveToTrash(path string) error {
+	if err := checkSandbox(path); err != nil {
+		return err
+	}
 	if p, err := exec.LookPath("gio"); err == nil {
 		return exec.Command(p, "trash", path).Run()
 	}
@@ -714,7 +717,7 @@ func moveToTrash(path string) error {
 			return exec.Command(p, "move", path, "trash:/").Run()
 		}
 	}
-	return os.RemoveAll(path)
+	return fsRemoveAll(path)
 }
 
 func (e *Explorer) paste() {
@@ -741,7 +744,7 @@ func (e *Explorer) paste() {
 		}
 		var err error
 		if e.cutMode {
-			err = os.Rename(src, dst)
+			err = fsRename(src, dst)
 			if err == nil {
 				a.onFileRenamed(src, dst)
 			}
@@ -771,6 +774,9 @@ func itoaSimple(n int) string {
 }
 
 func copyPath(src, dst string) error {
+	if err := checkSandbox(dst); err != nil {
+		return err
+	}
 	st, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -781,7 +787,7 @@ func copyPath(src, dst string) error {
 			return err
 		}
 		defer in.Close()
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, st.Mode())
+		out, err := fsOpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, st.Mode())
 		if err != nil {
 			return err
 		}
@@ -789,7 +795,7 @@ func copyPath(src, dst string) error {
 		_, err = io.Copy(out, in)
 		return err
 	}
-	if err := os.MkdirAll(dst, st.Mode()); err != nil {
+	if err := fsMkdirAll(dst, st.Mode()); err != nil {
 		return err
 	}
 	entries, err := os.ReadDir(src)
@@ -1104,7 +1110,7 @@ func (e *Explorer) dropAt(src *exNode, x, y int) {
 	}
 	dst := filepath.Join(dir, src.name)
 	move := func() {
-		if err := os.Rename(src.path, dst); err != nil {
+		if err := fsRename(src.path, dst); err != nil {
 			a.notify(NotifyError, "Failed to move: "+err.Error())
 			return
 		}
@@ -1134,7 +1140,7 @@ func (e *Explorer) contextMenu(n *exNode, x, y int) {
 			if !n.isDir {
 				p = filepath.Dir(p)
 			}
-			_ = exec.Command("xdg-open", p).Start()
+			openExternal(p)
 		}},
 		MenuItem{Label: "Open in Integrated Terminal", Run: func() {
 			p := n.path

@@ -56,8 +56,16 @@ func Letter(code byte) string {
 	return ""
 }
 
+// Guard, when set, can veto running git in a folder (used by tests to sandbox).
+var Guard func(dir string) error
+
 // Run executes git in dir and returns stdout.
 func Run(dir string, args ...string) (string, error) {
+	if Guard != nil {
+		if err := Guard(dir); err != nil {
+			return "", err
+		}
+	}
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
@@ -173,6 +181,11 @@ func Discard(root string, files []FileStatus) error {
 	var tracked []string
 	for _, f := range files {
 		if f.Untracked() {
+			if Guard != nil {
+				if err := Guard(filepath.Join(root, f.Path)); err != nil {
+					return err
+				}
+			}
 			if err := os.RemoveAll(filepath.Join(root, f.Path)); err != nil {
 				return err
 			}

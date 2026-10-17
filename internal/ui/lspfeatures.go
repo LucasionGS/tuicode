@@ -659,16 +659,16 @@ func (a *App) applyWorkspaceEdit(we lsp.WorkspaceEdit) bool {
 		case "create":
 			uri, _ := op["uri"].(string)
 			p := lsp.URIToPath(uri)
-			_ = os.MkdirAll(filepath.Dir(p), 0o755)
+			_ = fsMkdirAll(filepath.Dir(p), 0o755)
 			if _, err := os.Stat(p); err != nil {
-				_ = os.WriteFile(p, nil, 0o644)
+				_ = fsWriteFile(p, nil, 0o644)
 			}
 		case "rename":
 			oldURI, _ := op["oldUri"].(string)
 			newURI, _ := op["newUri"].(string)
 			op, np := lsp.URIToPath(oldURI), lsp.URIToPath(newURI)
-			_ = os.MkdirAll(filepath.Dir(np), 0o755)
-			if err := os.Rename(op, np); err == nil {
+			_ = fsMkdirAll(filepath.Dir(np), 0o755)
+			if err := fsRename(op, np); err == nil {
 				if d, ok := a.docs[op]; ok {
 					delete(a.docs, op)
 					d.Buf.Path = np
@@ -680,7 +680,7 @@ func (a *App) applyWorkspaceEdit(we lsp.WorkspaceEdit) bool {
 			}
 		case "delete":
 			uri, _ := op["uri"].(string)
-			_ = os.RemoveAll(lsp.URIToPath(uri))
+			_ = fsRemoveAll(lsp.URIToPath(uri))
 		}
 	}
 	ok := true

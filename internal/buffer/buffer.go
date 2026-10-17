@@ -160,8 +160,16 @@ func (b *Buffer) Save() error {
 	return b.SaveAs(b.Path)
 }
 
+// WriteGuard, when set, can veto writes to a path (used by tests to sandbox file access).
+var WriteGuard func(path string) error
+
 // SaveAs writes the buffer to path and adopts it as the buffer's path.
 func (b *Buffer) SaveAs(path string) error {
+	if WriteGuard != nil {
+		if err := WriteGuard(path); err != nil {
+			return err
+		}
+	}
 	var sb strings.Builder
 	if b.BOM {
 		sb.WriteString("\xEF\xBB\xBF")

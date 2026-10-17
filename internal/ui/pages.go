@@ -401,7 +401,7 @@ func (p *KeybindingsPage) saveBinding(cmd, keys string) {
 		return
 	}
 	header := "// Place your key bindings in this file to override the defaults\n"
-	if err := os.WriteFile(path, append([]byte(header), out...), 0o644); err != nil {
+	if err := fsWriteFile(path, append([]byte(header), out...), 0o644); err != nil {
 		a.notify(NotifyError, err.Error())
 		return
 	}
