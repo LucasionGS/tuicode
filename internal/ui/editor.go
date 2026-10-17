@@ -73,8 +73,9 @@ type EditorView struct {
 	lensTimer         bool
 	lensAsked         time.Time
 
-	preview bool
-	pinned  bool
+	preview         bool
+	pinned          bool
+	selectionAnchor *buffer.Pos // set by Ctrl+K Ctrl+B
 	// stickyRows is how many sticky scroll rows were drawn.
 	stickyRows  int
 	stickyLines []int

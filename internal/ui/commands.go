@@ -353,6 +353,23 @@ func (a *App) registerCommands() {
 	a.cmd("expandLineSelection", "Selection", "Expand Line Selection", a.move(func(v *EditorView) { v.ExpandLineSelection() }))
 	a.cmd("editor.action.smartSelect.expand", "Selection", "Expand Selection", a.move(func(v *EditorView) { v.ExpandSelection() }))
 	a.cmd("editor.action.smartSelect.shrink", "Selection", "Shrink Selection", a.move(func(v *EditorView) { v.ShrinkSelection() }))
+	a.cmd("editor.action.setSelectionAnchor", "Selection", "Set Selection Anchor", a.ed(func(v *EditorView) {
+		p := v.Cursor()
+		v.selectionAnchor = &p
+		a.setStatusMessage(fmt.Sprintf("Selection anchor set to %d:%d", p.Line+1, p.Col+1))
+	}))
+	a.cmd("editor.action.selectFromAnchorToCursor", "Selection", "Select from Anchor to Cursor", a.move(func(v *EditorView) {
+		if v.selectionAnchor != nil {
+			v.SetSelections([]buffer.Selection{{Anchor: v.buf().Clamp(*v.selectionAnchor), Active: v.Cursor()}}, 0)
+			v.selectionAnchor = nil
+		}
+	}))
+	a.cmd("editor.action.goToSelectionAnchor", "Selection", "Go to Selection Anchor", a.move(func(v *EditorView) {
+		if v.selectionAnchor != nil {
+			v.SetCursor(v.buf().Clamp(*v.selectionAnchor))
+		}
+	}))
+	a.cmd("editor.action.cancelSelectionAnchor", "Selection", "Cancel Selection Anchor", a.ed(func(v *EditorView) { v.selectionAnchor = nil }))
 	a.cmd("editor.action.addSelectionToPreviousFindMatch", "Selection", "Add Previous Occurrence", a.move(func(v *EditorView) { v.AddPreviousOccurrence() }))
 	a.cmd("editor.action.addSelectionToNextFindMatch", "Selection", "Add Next Occurrence", a.move(func(v *EditorView) { v.AddNextOccurrence(false) }))
 	a.cmd("editor.action.moveSelectionToNextFindMatch", "Selection", "Move Last Selection to Next Find Match", a.move(func(v *EditorView) { v.AddNextOccurrence(true) }))
@@ -660,6 +677,9 @@ func (a *App) registerCommands() {
 	a.alias("editor.action.goToDeclaration", "editor.action.revealDefinition")
 	a.cmd("editor.action.revealDefinitionAside", "", "Open Definition to the Side", a.ed(func(v *EditorView) { a.goToDefinition(v, true) }))
 	a.cmd("editor.action.peekDefinition", "", "Peek Definition", a.ed(func(v *EditorView) { a.peekLocations(v, "textDocument/definition", "Definitions") }))
+	a.cmd("editor.action.peekImplementation", "", "Peek Implementations", a.ed(func(v *EditorView) { a.peekLocations(v, "textDocument/implementation", "Implementations") }))
+	a.cmd("editor.action.peekTypeDefinition", "", "Peek Type Definition", a.ed(func(v *EditorView) { a.peekLocations(v, "textDocument/typeDefinition", "Type Definitions") }))
+	a.cmd("editor.action.peekDeclaration", "", "Peek Declaration", a.ed(func(v *EditorView) { a.peekLocations(v, "textDocument/declaration", "Declarations") }))
 	a.cmd("editor.action.goToTypeDefinition", "", "Go to Type Definition", a.ed(func(v *EditorView) { a.gotoLocations(v, "textDocument/typeDefinition", "type definition") }))
 	a.cmd("editor.action.goToImplementation", "", "Go to Implementations", a.ed(func(v *EditorView) { a.gotoLocations(v, "textDocument/implementation", "implementation") }))
 	a.cmd("editor.action.goToReferences", "", "Go to References", a.ed(func(v *EditorView) { a.peekReferences(v) }))
