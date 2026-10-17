@@ -355,7 +355,8 @@ func (a *App) launch(raw map[string]any, noDebug bool) {
 	}
 	if v, ok := cfg["preLaunchTask"].(string); ok && v != "" && raw["__preLaunchDone"] == nil {
 		for _, t := range a.collectTasks() {
-			if t.Label != v {
+			// multi-root task labels carry their folder: "build - Server"
+			if t.Label != v && !strings.HasPrefix(t.Label, v+" - ") {
 				continue
 			}
 			// run the task first and launch once it finished, like VS Code

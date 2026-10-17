@@ -81,11 +81,34 @@ func (a *App) substituteVars(s string) string {
 
 // collectTasks gathers tasks.json tasks plus auto-detected ones.
 func (a *App) collectTasks() []task {
+	folders := a.folders()
 	var out []task
-	if a.root == "" {
-		return out
+	seen := map[string]bool{}
+	for _, f := range folders {
+		if seen[f.Path] {
+			continue
+		}
+		seen[f.Path] = true
+		for _, t := range a.collectTasksIn(f.Path) {
+			// a folder's own ${workspaceFolder} is that folder
+			t.Command = strings.ReplaceAll(t.Command, "${workspaceFolder}", f.Path)
+			t.Cwd = strings.ReplaceAll(t.Cwd, "${workspaceFolder}", f.Path)
+			if t.Cwd == "" {
+				t.Cwd = f.Path
+			}
+			if len(folders) > 1 {
+				t.Label += " - " + f.Name
+			}
+			out = append(out, t)
+		}
 	}
-	if data, err := os.ReadFile(filepath.Join(a.root, ".vscode", "tasks.json")); err == nil {
+	return out
+}
+
+// collectTasksIn finds the tasks.json tasks and detected tasks of one folder.
+func (a *App) collectTasksIn(root string) []task {
+	var out []task
+	if data, err := os.ReadFile(filepath.Join(root, ".vscode", "tasks.json")); err == nil {
 		var tf tasksFile
 		if err := config.UnmarshalJSONC(data, &tf); err == nil {
 			for _, t := range tf.Tasks {
@@ -136,17 +159,17 @@ func (a *App) collectTasks() []task {
 		}
 	}
 	// package.json scripts
-	if data, err := os.ReadFile(filepath.Join(a.root, "package.json")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(root, "package.json")); err == nil {
 		var pkg struct {
 			Scripts map[string]string `json:"scripts"`
 		}
 		if json.Unmarshal(data, &pkg) == nil {
 			runner := "npm run"
-			if fileExists(filepath.Join(a.root, "bun.lockb")) || fileExists(filepath.Join(a.root, "bun.lock")) {
+			if fileExists(filepath.Join(root, "bun.lockb")) || fileExists(filepath.Join(root, "bun.lock")) {
 				runner = "bun run"
-			} else if fileExists(filepath.Join(a.root, "pnpm-lock.yaml")) {
+			} else if fileExists(filepath.Join(root, "pnpm-lock.yaml")) {
 				runner = "pnpm run"
-			} else if fileExists(filepath.Join(a.root, "yarn.lock")) {
+			} else if fileExists(filepath.Join(root, "yarn.lock")) {
 				runner = "yarn"
 			}
 			var names []string
@@ -170,7 +193,7 @@ func (a *App) collectTasks() []task {
 	}
 	// deno.json tasks
 	for _, f := range []string{"deno.json", "deno.jsonc"} {
-		if data, err := os.ReadFile(filepath.Join(a.root, f)); err == nil {
+		if data, err := os.ReadFile(filepath.Join(root, f)); err == nil {
 			var dj struct {
 				Tasks map[string]any `json:"tasks"`
 			}
@@ -196,7 +219,7 @@ func (a *App) collectTasks() []task {
 		}
 	}
 	// Makefile targets
-	if data, err := os.ReadFile(filepath.Join(a.root, "Makefile")); err == nil {
+	if data, err := os.ReadFile(filepath.Join(root, "Makefile")); err == nil {
 		re := regexp.MustCompile(`(?m)^([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*:(?:[^=]|$)`)
 		seen := map[string]bool{}
 		for _, m := range re.FindAllStringSubmatch(string(data), -1) {
@@ -217,7 +240,7 @@ func (a *App) collectTasks() []task {
 			out = append(out, task{Label: "make: " + n, Command: "make " + n, Group: g, Source: "Makefile", Matchers: []*problemMatcher{builtinMatchers["gcc"], builtinMatchers["go"]}})
 		}
 	}
-	if fileExists(filepath.Join(a.root, "go.mod")) {
+	if fileExists(filepath.Join(root, "go.mod")) {
 		goM := []*problemMatcher{builtinMatchers["go"]}
 		out = append(out,
 			task{Label: "go: build", Command: "go build ./...", Group: "build", Source: "go", Matchers: goM},
@@ -226,7 +249,7 @@ func (a *App) collectTasks() []task {
 			task{Label: "go: vet", Command: "go vet ./...", Source: "go", Matchers: goM},
 		)
 	}
-	if fileExists(filepath.Join(a.root, "Cargo.toml")) {
+	if fileExists(filepath.Join(root, "Cargo.toml")) {
 		rustM := []*problemMatcher{builtinMatchers["rustc"]}
 		out = append(out,
 			task{Label: "cargo: build", Command: "cargo build", Group: "build", Source: "cargo", Matchers: rustM},
@@ -234,7 +257,7 @@ func (a *App) collectTasks() []task {
 			task{Label: "cargo: run", Command: "cargo run", Group: "run", Source: "cargo", Matchers: rustM},
 		)
 	}
-	if fileExists(filepath.Join(a.root, "pubspec.yaml")) {
+	if fileExists(filepath.Join(root, "pubspec.yaml")) {
 		out = append(out,
 			task{Label: "dart: run", Command: "dart run", Group: "run", Source: "dart"},
 			task{Label: "dart: test", Command: "dart test", Group: "test", Source: "dart"},

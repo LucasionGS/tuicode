@@ -80,3 +80,19 @@ func TestMultiRootWorkspace(t *testing.T) {
 		t.Fatalf("title: %q", a.windowTitle())
 	}
 }
+
+func TestMultiRootTasks(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{
+		"p.code-workspace":   `{"folders": [{"name": "Client", "path": "client"}, {"name": "Server", "path": "server"}]}`,
+		"client/package.json": `{"scripts": {"dev": "vite"}}`,
+		"server/deno.json":    `{"tasks": {"dev": "deno run -A main.ts"}}`,
+	})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "p.code-workspace")}})
+	got := map[string]string{}
+	for _, tk := range h.a.collectTasks() {
+		got[tk.Label] = tk.Cwd
+	}
+	if got["npm: dev - Client"] != filepath.Join(dir, "client") || got["deno: dev - Server"] != filepath.Join(dir, "server") {
+		t.Fatalf("tasks: %v", got)
+	}
+}
