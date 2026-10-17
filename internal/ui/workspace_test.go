@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -95,4 +97,46 @@ func TestMultiRootTasks(t *testing.T) {
 	if got["npm: dev - Client"] != filepath.Join(dir, "client") || got["deno: dev - Server"] != filepath.Join(dir, "server") {
 		t.Fatalf("tasks: %v", got)
 	}
+}
+
+func TestRenameUpdatesImports(t *testing.T) {
+	if os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_LSP")
+	}
+	if _, err := exec.LookPath("typescript-language-server"); err != nil {
+		t.Skip("typescript-language-server not installed")
+	}
+	dir := tempWorkspace(t, map[string]string{
+		"tsconfig.json":         `{"compilerOptions": {"strict": true}}`,
+		"main.ts":               "import { a } from \"./a\";\nconsole.log(a);\n",
+		"a.ts":                  "export const a = 1;\n",
+		".vscode/settings.json": `{"typescript.updateImportsOnFileMove.enabled": "always"}`,
+	})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "main.ts")}})
+	v := h.a.ActiveView()
+	for i := 0; i < 100 && (h.a.lsp.Client(v.buf()) == nil || h.a.lsp.Client(v.buf()).Cap("workspace.fileOperations.willRename") == nil); i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	if c := h.a.lsp.Client(v.buf()); c == nil || c.Cap("workspace.fileOperations.willRename") == nil {
+		if c != nil {
+			t.Logf("workspace caps: %v", c.Capabilities["workspace"])
+		}
+		t.Skip("server does not support willRenameFiles")
+	}
+	done := false
+	h.a.movePath(filepath.Join(dir, "a.ts"), filepath.Join(dir, "b.ts"), func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		done = true
+	})
+	for i := 0; i < 100 && !done; i++ {
+		time.Sleep(50 * time.Millisecond)
+		h.flush()
+	}
+	if !strings.Contains(h.text(), "./b") {
+		t.Fatalf("import not updated: %q", h.text())
+	}
+	h.a.lsp.ShutdownAll()
 }

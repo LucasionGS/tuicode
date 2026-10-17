@@ -897,12 +897,12 @@ func (a *App) registerCommands() {
 				a.notify(NotifyError, "A file named '"+name+"' already exists.")
 				return
 			}
-			if err := fsRename(old, target); err != nil {
-				a.notify(NotifyError, "Rename failed: "+err.Error())
-				return
-			}
-			a.onFileRenamed(old, target)
-			a.explorer.refreshSoon()
+			a.movePath(old, target, func(err error) {
+				if err != nil {
+					a.notify(NotifyError, "Rename failed: "+err.Error())
+				}
+				a.explorer.refreshSoon()
+			})
 		})
 	}))
 	a.cmd("workbench.files.action.compareWithSaved", "File", "Compare Active File with Saved", a.ed(func(v *EditorView) { a.compareWithSaved(v) }))

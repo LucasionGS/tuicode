@@ -628,16 +628,14 @@ func (e *Explorer) commitEdit() {
 			e.rebuild()
 			return
 		}
-		if err := fsMkdirAll(filepath.Dir(target), 0o755); err != nil {
-			a.notify(NotifyError, err.Error())
-		}
-		if err := fsRename(ed.rename, target); err != nil {
-			a.notify(NotifyError, "Unable to rename: "+err.Error())
-		} else {
-			a.onFileRenamed(ed.rename, target)
-		}
-		e.refresh()
-		e.reveal(target, false)
+		a.movePath(ed.rename, target, func(err error) {
+			if err != nil {
+				a.notify(NotifyError, "Unable to rename: "+err.Error())
+			}
+			e.refresh()
+			e.reveal(target, false)
+		})
+		e.rebuild()
 		return
 	}
 	if _, err := os.Stat(target); err == nil {
@@ -792,10 +790,12 @@ func (e *Explorer) paste() {
 		}
 		var err error
 		if e.cutMode {
-			err = fsRename(src, dst)
-			if err == nil {
-				a.onFileRenamed(src, dst)
-			}
+			a.movePath(src, dst, func(err error) {
+				if err != nil {
+					a.notify(NotifyError, "Failed to paste: "+err.Error())
+				}
+				e.refresh()
+			})
 		} else {
 			err = copyPath(src, dst)
 		}
@@ -1165,13 +1165,14 @@ func (e *Explorer) dropAt(src *exNode, x, y int) {
 	}
 	dst := filepath.Join(dir, src.name)
 	move := func() {
-		if err := fsRename(src.path, dst); err != nil {
-			a.notify(NotifyError, "Failed to move: "+err.Error())
-			return
-		}
-		a.onFileRenamed(src.path, dst)
-		e.refresh()
-		e.reveal(dst, false)
+		a.movePath(src.path, dst, func(err error) {
+			if err != nil {
+				a.notify(NotifyError, "Failed to move: "+err.Error())
+				return
+			}
+			e.refresh()
+			e.reveal(dst, false)
+		})
 	}
 	if a.settings.Bool("explorer.confirmDragAndDrop", "") {
 		a.showDialog("Are you sure you want to move '"+src.name+"' into '"+filepath.Base(dir)+"'?", "", []string{"Move", "Cancel"}, func(c int) {

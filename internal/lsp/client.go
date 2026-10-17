@@ -482,6 +482,7 @@ func clientCapabilities() map[string]any {
 			"configuration":          true,
 			"symbol":                 map[string]any{"symbolKind": map[string]any{"valueSet": symbolKinds}},
 			"executeCommand":         map[string]any{},
+			"fileOperations":         map[string]any{"willRename": true, "didRename": true},
 		},
 		"window": map[string]any{
 			"workDoneProgress": true,

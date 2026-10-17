@@ -59,6 +59,7 @@ var Defaults = map[string]any{
 	"editor.autoClosingBrackets":                  "languageDefined",
 	"editor.linkedEditing":                        false,
 	"editor.codeLens":                             true,
+	"typescript.updateImportsOnFileMove.enabled":  "prompt",
 	"debug.inlineValues":                          "auto",
 	"merge-conflict.codeLens.enabled":             true,
 	"merge-conflict.decorators.enabled":           true,
