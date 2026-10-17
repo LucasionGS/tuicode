@@ -326,3 +326,15 @@ func TestScreenshotCodeLens(t *testing.T) {
 	}
 	h.a.lsp.ShutdownAll()
 }
+
+func TestScreenshotSidebarRight(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" {
+		t.Skip("set TUI_SHOT")
+	}
+	dir := tempWorkspace(t, map[string]string{"main.go": "package main\n\nfunc main() {\n}\n", ".vscode/settings.json": `{"workbench.sideBar.location": "right"}`})
+	h := newHarness(t, 120, 24, Options{Paths: []string{dir}})
+	h.a.OpenFile(filepath.Join(dir, "main.go"), false)
+	h.settle()
+	h.snapshot(filepath.Join(out, "right.json"))
+}

@@ -527,6 +527,15 @@ func (a *App) registerCommands() {
 	a.cmd("workbench.action.zoomIn", "View", "Zoom In", func(any) { a.setStatusMessage("Use your terminal's zoom (e.g. Ctrl+Shift+=) to change the font size.") })
 	a.alias("workbench.action.zoomOut", "workbench.action.zoomIn")
 	a.cmd("workbench.action.editor.changeLanguageMode", "", "Change Language Mode", func(any) { a.pickLanguage() })
+	a.cmd("workbench.action.toggleSidebarPosition", "View", "Toggle Primary Side Bar Position", func(any) {
+		pos := "right"
+		if a.sidebarRight() {
+			pos = "left"
+		}
+		if err := setUserSetting(a, "workbench.sideBar.location", pos); err != nil {
+			a.notify(NotifyError, err.Error())
+		}
+	})
 	a.cmd("workbench.action.toggleAutoSave", "File", "Toggle Auto Save", func(any) { a.toggleAutoSave() })
 	a.cmd("workbench.action.files.toggleActiveEditorReadonlyInSession", "File", "Toggle Active Editor Read-only in Session", a.ed(func(v *EditorView) { v.buf().ReadOnly = !v.buf().ReadOnly }))
 	a.cmd("workbench.action.files.setActiveEditorReadonlyInSession", "File", "Set Active Editor Read-only in Session", a.ed(func(v *EditorView) { v.buf().ReadOnly = true }))

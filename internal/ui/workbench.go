@@ -18,6 +18,11 @@ type cursorReq struct {
 	style   tcell.CursorStyle
 }
 
+// sidebarRight reports whether workbench.sideBar.location puts the side bar on the right.
+func (a *App) sidebarRight() bool {
+	return a.settings.String("workbench.sideBar.location", "") == "right"
+}
+
 func (a *App) layout() {
 	w, h := a.width, a.height
 	y0 := 0
@@ -33,19 +38,29 @@ func (a *App) layout() {
 		a.rStatus = Rect{0, h - 1, w, 1}
 	}
 	mainH := max(h-y0-statusH, 1)
-	x := 0
+	x, right := 0, w
 	a.rActivity = Rect{}
 	if a.activityVisible && !a.zenMode {
-		a.rActivity = Rect{0, y0, activityWidth, mainH}
-		x = activityWidth
+		if a.sidebarRight() {
+			a.rActivity = Rect{w - activityWidth, y0, activityWidth, mainH}
+			right -= activityWidth
+		} else {
+			a.rActivity = Rect{0, y0, activityWidth, mainH}
+			x = activityWidth
+		}
 	}
 	a.rSidebar = Rect{}
 	if a.sidebarVisible && !a.zenMode {
-		sw := clampInt(a.sidebarWidth, 15, max(w-x-20, 15))
-		a.rSidebar = Rect{x, y0, sw, mainH}
-		x += sw
+		sw := clampInt(a.sidebarWidth, 15, max(right-x-20, 15))
+		if a.sidebarRight() {
+			a.rSidebar = Rect{right - sw, y0, sw, mainH}
+			right -= sw
+		} else {
+			a.rSidebar = Rect{x, y0, sw, mainH}
+			x += sw
+		}
 	}
-	area := Rect{x, y0, max(w-x, 1), mainH}
+	area := Rect{x, y0, max(right-x, 1), mainH}
 	a.rPanel = Rect{}
 	if a.panelVisible && !a.zenMode {
 		ph := clampInt(a.panelHeight, 4, max(mainH-4, 4))
@@ -290,8 +305,13 @@ func (a *App) drawActivityBar() {
 		}
 		st := styleFB(fg, bgc)
 		if active {
-			a.cv.Set(r.X, y, '▎', styleFB(th.C("activityBar.activeBorder"), bgc))
-			a.cv.Set(r.X, y+1, '▎', styleFB(th.C("activityBar.activeBorder"), bgc))
+			// the indicator sits on the outer edge of the window
+			bx, glyph := r.X, '▎'
+			if a.sidebarRight() {
+				bx, glyph = r.X+r.W-1, '▕'
+			}
+			a.cv.Set(bx, y, glyph, styleFB(th.C("activityBar.activeBorder"), bgc))
+			a.cv.Set(bx, y+1, glyph, styleFB(th.C("activityBar.activeBorder"), bgc))
 		}
 		a.cv.Text(r.X+1, y, r.X+r.W, a.Icon(it.icon), st)
 		// badges
@@ -596,17 +616,22 @@ func (a *App) drawSidebar() {
 		title = a.hierView.title()
 	}
 	tst := styleFB(th.C("sideBarTitle.foreground"), bgc)
-	a.cv.Text(r.X+2, r.Y, r.X+r.W-1, title, tst)
-	body := Rect{r.X, r.Y + 1, r.W - 1, r.H - 1}
+	// the sash sits on the edge next to the editor
+	sashX, inner := r.X+r.W-1, Rect{r.X, r.Y, r.W - 1, r.H}
+	if a.sidebarRight() {
+		sashX, inner = r.X, Rect{r.X + 1, r.Y, r.W - 1, r.H}
+	}
+	a.cv.Text(inner.X+2, r.Y, inner.X+inner.W, title, tst)
+	body := Rect{inner.X, r.Y + 1, inner.W, r.H - 1}
 	switch a.sidebarView {
 	case "explorer":
-		a.explorer.drawActions(Rect{r.X, r.Y, r.W - 1, 1})
+		a.explorer.drawActions(Rect{inner.X, r.Y, inner.W, 1})
 		a.explorer.draw(body)
 	case "search":
-		a.searchV.drawActions(Rect{r.X, r.Y, r.W - 1, 1})
+		a.searchV.drawActions(Rect{inner.X, r.Y, inner.W, 1})
 		a.searchV.draw(body)
 	case "scm":
-		a.scm.drawActions(Rect{r.X, r.Y, r.W - 1, 1})
+		a.scm.drawActions(Rect{inner.X, r.Y, inner.W, 1})
 		a.scm.draw(body)
 	case "outline":
 		a.outline.draw(body)
@@ -615,23 +640,27 @@ func (a *App) drawSidebar() {
 	case "debug":
 		a.debugView.draw(body)
 	case "hierarchy":
-		a.hierView.drawActions(Rect{r.X, r.Y, r.W - 1, 1})
+		a.hierView.drawActions(Rect{inner.X, r.Y, inner.W, 1})
 		a.hierView.draw(body)
 	}
 	a.cv.clip = r
 	// sash on the right edge
-	sash := Rect{r.X + r.W - 1, r.Y, 1, r.H}
+	sash := Rect{sashX, r.Y, 1, r.H}
 	sashColor := bgc
 	if th.Defined("sideBar.border") {
 		sashColor = th.OverColor("sideBar.border", bgc)
 	}
 	dragging := a.sashDrag == "sidebar"
 	hover := sash.Contains(a.mouseX, a.mouseY)
+	edge := '▕'
+	if a.sidebarRight() {
+		edge = '▏'
+	}
 	for y := sash.Y; y < sash.Y+sash.H; y++ {
 		if dragging || hover {
-			a.cv.Set(sash.X, y, '▕', styleFB(th.C("sash.hoverBorder"), bgc))
+			a.cv.Set(sash.X, y, edge, styleFB(th.C("sash.hoverBorder"), bgc))
 		} else {
-			a.cv.Set(sash.X, y, '▕', styleFB(sashColor, bgc))
+			a.cv.Set(sash.X, y, edge, styleFB(sashColor, bgc))
 		}
 	}
 	a.addHit(sash, func(ev MouseEvent) bool {
@@ -642,7 +671,11 @@ func (a *App) drawSidebar() {
 					a.sashDrag = ""
 					return
 				}
-				a.sidebarWidth = clampInt(ev.X-a.rSidebar.X+1, 15, a.width-30)
+				if a.sidebarRight() {
+					a.sidebarWidth = clampInt(a.rSidebar.X+a.rSidebar.W-ev.X, 15, a.width-30)
+				} else {
+					a.sidebarWidth = clampInt(ev.X-a.rSidebar.X+1, 15, a.width-30)
+				}
 			}
 		}
 		return true
