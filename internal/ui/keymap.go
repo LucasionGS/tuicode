@@ -197,6 +197,8 @@ var defaultKeymap = [][3]string{
 	{"ctrl+k ctrl+right", "workbench.action.focusRightGroup", ""},
 	{"ctrl+k ctrl+up", "workbench.action.focusAboveGroup", ""},
 	{"f7", "editor.action.wordHighlight.next", "editorTextFocus"},
+	{"ctrl+k shift+enter", "workbench.action.pinEditor", "!activeEditorIsPinned"},
+	{"ctrl+k shift+enter", "workbench.action.unpinEditor", "activeEditorIsPinned"},
 	{"shift+alt+h", "references-view.showCallHierarchy", "editorTextFocus"},
 	{"shift+f7", "editor.action.wordHighlight.prev", "editorTextFocus"},
 	{"ctrl+k ctrl+down", "workbench.action.focusBelowGroup", ""},

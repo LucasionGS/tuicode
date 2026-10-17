@@ -130,3 +130,33 @@ func TestEditorGridLayout(t *testing.T) {
 		t.Fatal("stacked groups not drawn")
 	}
 }
+
+func TestPinnedTabs(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "a\n", "b.txt": "b\n", "c.txt": "c\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{dir}})
+	h.a.closeAllEditors()
+	for _, n := range []string{"a.txt", "b.txt", "c.txt"} {
+		h.a.OpenFile(filepath.Join(dir, n), false)
+	}
+	g := h.a.ActiveGroup()
+	h.a.RunCommand("workbench.action.pinEditor", nil) // c.txt
+	if g.tabs[0].doc.Title() != "c.txt" || !g.tabs[0].pinned {
+		t.Fatalf("pinned tab not moved first")
+	}
+	h.a.RunCommand("workbench.action.closeActiveEditor", nil)
+	if len(g.tabs) != 3 || g.Active().pinned {
+		t.Fatalf("ctrl+w closed a pinned tab: %d tabs", len(g.tabs))
+	}
+	h.a.RunCommand("workbench.action.closeOtherEditors", nil)
+	if len(g.tabs) != 2 {
+		t.Fatalf("close others: %d tabs", len(g.tabs))
+	}
+	h.a.RunCommand("workbench.action.closeEditorsInGroup", nil)
+	if len(g.tabs) != 1 || g.tabs[0].doc.Title() != "c.txt" {
+		t.Fatalf("close all keeps pinned first: %d tabs", len(g.tabs))
+	}
+	h.a.RunCommand("workbench.action.closeEditorsInGroup", nil)
+	if len(g.tabs) != 0 {
+		t.Fatalf("second close all: %d tabs", len(g.tabs))
+	}
+}

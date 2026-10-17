@@ -91,6 +91,9 @@ func (g *EditorGroup) addTab(v *EditorView, preview bool) {
 	if len(g.tabs) > 0 {
 		at = g.active + 1
 	}
+	for at < len(g.tabs) && g.tabs[at].pinned && !v.pinned {
+		at++
+	}
 	g.tabs = append(g.tabs, nil)
 	copy(g.tabs[at+1:], g.tabs[at:])
 	g.tabs[at] = v
@@ -285,6 +288,8 @@ func (g *EditorGroup) drawTabs(r Rect, focused bool) {
 		dirty := v.special == nil && v.buf().Dirty()
 		closeHover := a.mouseY == r.Y && a.mouseX == cx
 		switch {
+		case v.pinned && !closeHover:
+			a.cv.Text(cx, r.Y, cx+1, a.Icon(IcoPinned), st)
 		case closeHover:
 			a.cv.Text(cx, r.Y, cx+1, a.Icon(IcoClose), st.Foreground(th.C("tab.activeForeground")))
 		case dirty:
@@ -314,13 +319,19 @@ func (g *EditorGroup) drawTabs(r Rect, focused bool) {
 				a.activeGroup = a.groupIndex(g)
 				switch ev.Button {
 				case tcell.Button3:
-					a.closeTab(g, idx)
+					if !g.tabs[idx].pinned {
+						a.closeTab(g, idx)
+					}
 				case tcell.Button2:
 					g.setActive(idx)
 					a.showTabContextMenu(g, idx, ev.X, ev.Y+1)
 				default:
 					if ev.X == tabX+w-2 {
-						a.closeTab(g, idx)
+						if g.tabs[idx].pinned {
+							g.tabs[idx].pinned = false
+						} else {
+							a.closeTab(g, idx)
+						}
 						return true
 					}
 					if ev.Clicks == 2 {
@@ -418,6 +429,32 @@ func (a *App) worstSeverity(d *Document) int {
 	return worst
 }
 
+func pinMenuItem(v *EditorView) MenuItem {
+	if v.pinned {
+		return MenuItem{Label: "Unpin", Command: "workbench.action.unpinEditor"}
+	}
+	return MenuItem{Label: "Pin", Command: "workbench.action.pinEditor"}
+}
+
+// setPinned pins or unpins the active tab, keeping pinned tabs first like VS Code.
+func (g *EditorGroup) setPinned(v *EditorView, pinned bool) {
+	i := g.indexOf(v)
+	if i < 0 || v.pinned == pinned {
+		return
+	}
+	v.pinned = pinned
+	v.preview = false
+	g.tabs = append(g.tabs[:i], g.tabs[i+1:]...)
+	at := 0
+	for at < len(g.tabs) && g.tabs[at].pinned {
+		at++
+	}
+	g.tabs = append(g.tabs, nil)
+	copy(g.tabs[at+1:], g.tabs[at:])
+	g.tabs[at] = v
+	g.active = at
+}
+
 func (a *App) showTabContextMenu(g *EditorGroup, idx int, x, y int) {
 	v := g.tabs[idx]
 	items := []MenuItem{
@@ -439,6 +476,7 @@ func (a *App) showTabContextMenu(g *EditorGroup, idx int, x, y int) {
 	}
 	items = append(items,
 		MenuItem{Label: "Keep Open", Command: "workbench.action.keepEditor"},
+		pinMenuItem(v),
 		MenuItem{Separator: true},
 		MenuItem{Label: "Split Right", Command: "workbench.action.splitEditor"},
 	)

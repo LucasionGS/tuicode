@@ -632,6 +632,8 @@ func (a *App) contextKey(key string) any {
 		return v != nil && v.HasSelection()
 	case "editorHasMultipleSelections":
 		return v != nil && len(v.sels) > 1
+	case "activeEditorIsPinned":
+		return v != nil && v.pinned
 	case "editorReadonly":
 		return v != nil && v.buf().ReadOnly
 	case "editorLangId", "resourceLangId":

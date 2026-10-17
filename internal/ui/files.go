@@ -501,9 +501,18 @@ func (a *App) pathPicker(title, initial string, folders bool, done func(string))
 //#region Groups
 
 func (a *App) closeAllEditors() {
-	for _, g := range a.groups {
-		a.closeEditorsWhere(g, func(int) bool { return true })
+	for _, g := range append([]*EditorGroup{}, a.groups...) {
+		a.closeAllInGroup(g)
 	}
+}
+
+// closeAllInGroup closes unpinned editors first, and pinned ones only when nothing else is left, like VS Code.
+func (a *App) closeAllInGroup(g *EditorGroup) {
+	unpinned := false
+	for _, t := range g.tabs {
+		unpinned = unpinned || !t.pinned
+	}
+	a.closeEditorsWhere(g, func(i int) bool { return !unpinned || !g.tabs[i].pinned })
 }
 
 // closeEditorsWhere closes matching tabs (dirty tabs prompt first).

@@ -68,6 +68,7 @@ type EditorView struct {
 	inlayVersion      int
 
 	preview bool
+	pinned  bool
 	// stickyRows is how many sticky scroll rows were drawn.
 	stickyRows  int
 	stickyLines []int

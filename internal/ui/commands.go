@@ -127,24 +127,44 @@ func (a *App) registerCommands() {
 			}
 			return
 		}
+		if t := g.Active(); t.pinned && a.settings.String("workbench.editor.preventPinnedEditorClose", "") != "never" {
+			// keyboard close of a pinned editor activates the next unpinned one instead
+			for i := range g.tabs {
+				if j := (g.active + 1 + i) % len(g.tabs); !g.tabs[j].pinned {
+					g.setActive(j)
+					break
+				}
+			}
+			return
+		}
 		a.closeTab(g, g.active)
 	})
 	a.cmd("workbench.action.closeAllEditors", "View", "Close All Editors", func(any) { a.closeAllEditors() })
 	a.cmd("workbench.action.closeAllGroups", "View", "Close All Editor Groups", func(any) { a.closeAllEditors() })
-	a.cmd("workbench.action.closeEditorsInGroup", "View", "Close All Editors in Group", func(any) { a.closeEditorsWhere(a.ActiveGroup(), func(i int) bool { return true }) })
+	a.cmd("workbench.action.closeEditorsInGroup", "View", "Close All Editors in Group", func(any) { a.closeAllInGroup(a.ActiveGroup()) })
 	a.cmd("workbench.action.closeOtherEditors", "View", "Close Other Editors in Group", func(any) {
 		g := a.ActiveGroup()
 		act := g.Active()
-		a.closeEditorsWhere(g, func(i int) bool { return g.tabs[i] != act })
+		a.closeEditorsWhere(g, func(i int) bool { return g.tabs[i] != act && !g.tabs[i].pinned })
 	})
 	a.cmd("workbench.action.closeEditorsToTheRight", "View", "Close Editors to the Right in Group", func(any) {
 		g := a.ActiveGroup()
 		act := g.active
-		a.closeEditorsWhere(g, func(i int) bool { return i > act })
+		a.closeEditorsWhere(g, func(i int) bool { return i > act && !g.tabs[i].pinned })
 	})
 	a.cmd("workbench.action.closeUnmodifiedEditors", "View", "Close Saved Editors in Group", func(any) {
 		g := a.ActiveGroup()
-		a.closeEditorsWhere(g, func(i int) bool { return g.tabs[i].special != nil || !g.tabs[i].buf().Dirty() })
+		a.closeEditorsWhere(g, func(i int) bool { return !g.tabs[i].pinned && (g.tabs[i].special != nil || !g.tabs[i].buf().Dirty()) })
+	})
+	a.cmd("workbench.action.pinEditor", "View", "Pin Editor", func(any) {
+		if g := a.ActiveGroup(); g.Active() != nil {
+			g.setPinned(g.Active(), true)
+		}
+	})
+	a.cmd("workbench.action.unpinEditor", "View", "Unpin Editor", func(any) {
+		if g := a.ActiveGroup(); g.Active() != nil {
+			g.setPinned(g.Active(), false)
+		}
 	})
 	a.cmd("workbench.action.reopenClosedEditor", "View", "Reopen Closed Editor", func(any) {
 		if n := len(a.closedTabs); n > 0 {
