@@ -32,7 +32,6 @@ type ProblemsPanel struct {
 	dirty     bool
 	collapsed map[string]bool
 	rect      Rect
-	filter    string
 }
 
 func newProblemsPanel(a *App) *ProblemsPanel {

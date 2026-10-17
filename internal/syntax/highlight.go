@@ -113,16 +113,6 @@ var selfKeywords = map[string]bool{
 	"this": true, "self": true, "super": true, "Self": true,
 }
 
-var storageKeywords = map[string]bool{
-	"func": true, "function": true, "var": true, "let": true, "const": true, "class": true, "struct": true,
-	"interface": true, "type": true, "enum": true, "fn": true, "def": true, "impl": true, "trait": true,
-	"pub": true, "public": true, "private": true, "protected": true, "static": true, "readonly": true,
-	"async": true, "map": true, "chan": true, "namespace": true, "extends": true, "implements": true,
-	"declare": true, "abstract": true, "final": true, "override": true, "virtual": true, "mut": true,
-	"new": true, "delete": true, "typeof": true, "instanceof": true, "keyof": true, "in": true, "of": true,
-	"void": true, "lambda": true, "local": true, "export": false,
-}
-
 // Highlighter tokenizes text with a chroma lexer and post-processes the result.
 type Highlighter struct {
 	lexer chroma.Lexer

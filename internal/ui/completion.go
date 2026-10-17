@@ -45,7 +45,6 @@ type Completion struct {
 	loading     bool
 	client      *lsp.Client
 	triggerChar string
-	resolveID   int
 	gen         int
 }
 
@@ -328,16 +327,16 @@ func (a *App) triggerCompletion(v *EditorView, explicit bool, triggerChar string
 	a.refilterCompletion(v)
 }
 
-// completionStartFor uses the server's edit range (if any) to determine the completion start.
+// completionStartFor uses the first item's edit range (if any) to determine the completion start.
 func (a *App) completionStartFor(v *EditorView, list *lsp.CompletionList, def buffer.Pos) buffer.Pos {
-	for i := range list.Items {
-		if te, ok := list.Items[i].Edit(); ok {
-			p := a.lsp.FromLSP(v.buf(), te.Range.Start)
-			if p.Line == def.Line && p.Col <= v.Cursor().Col {
-				return p
-			}
+	if len(list.Items) == 0 {
+		return def
+	}
+	if te, ok := list.Items[0].Edit(); ok {
+		p := a.lsp.FromLSP(v.buf(), te.Range.Start)
+		if p.Line == def.Line && p.Col <= v.Cursor().Col {
+			return p
 		}
-		break
 	}
 	return def
 }

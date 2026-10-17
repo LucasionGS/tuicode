@@ -882,7 +882,6 @@ func (s *SCMView) draw(r Rect) {
 		}
 		a.cv.Text(list.X+list.W-2, ry, list.X+list.W, letter, lst)
 		if hover || sel {
-			ax := list.X + list.W - 9
 			acts := []struct {
 				icon int
 				run  func()
@@ -906,7 +905,7 @@ func (s *SCMView) draw(r Rect) {
 					}{IcoAdd, func() { a.gitRun(func() error { return git.Stage(a.gitRoot, f.Path) }) }},
 				)
 			}
-			ax = list.X + list.W - 3 - len(acts)*2
+			ax := list.X + list.W - 3 - len(acts)*2
 			for _, act := range acts {
 				a.cv.Fill(Rect{ax - 1, ry, 2, 1}, ' ', st)
 				a.cv.Text(ax, ry, ax+1, a.Icon(act.icon), st)

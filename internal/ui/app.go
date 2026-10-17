@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"sort"
 	"strings"
 	"time"
 
@@ -61,7 +60,6 @@ type MouseEvent struct {
 type hit struct {
 	r       Rect
 	handler func(ev MouseEvent) bool
-	cursor  string
 }
 
 // Options configure startup.
@@ -96,7 +94,6 @@ type App struct {
 	nerdIcons bool
 
 	commands       map[string]*Command
-	defaultBinds   []config.Binding
 	bindings       []config.Binding
 	pendingChord   []string
 	recentCommands []string
@@ -113,7 +110,6 @@ type App struct {
 	sidebarVisible   bool
 	sidebarWidth     int
 	sidebarView      string
-	auxVisible       bool
 	panelVisible     bool
 	panelHeight      int
 	panelMaximized   bool
@@ -164,7 +160,6 @@ type App struct {
 	mouseX      int
 	mouseY      int
 	hoverTimer  *time.Timer
-	hoverAt     time.Time
 	tooltip     *Tooltip
 
 	// editing helpers
@@ -180,9 +175,6 @@ type App struct {
 	lastEdits  []navEntry
 
 	autoSaveTimer *time.Timer
-	frameTimer    *time.Timer
-	frameDue      bool
-	lastDraw      time.Time
 	tickCount     int
 
 	cursor              cursorReq
@@ -555,21 +547,6 @@ func (a *App) tick() {
 	}
 }
 
-// requestRedraw schedules a frame (used by background producers like terminals).
-func (a *App) requestRedraw() {
-	if a.frameDue {
-		return
-	}
-	a.frameDue = true
-	delay := 16*time.Millisecond - time.Since(a.lastDraw)
-	if delay < 0 {
-		delay = 0
-	}
-	time.AfterFunc(delay, func() {
-		a.Post(func() { a.frameDue = false })
-	})
-}
-
 func (a *App) handleEvent(ev tcell.Event) {
 	switch e := ev.(type) {
 	case *tcell.EventResize:
@@ -782,11 +759,6 @@ var commandsToSkipShell = map[string]bool{
 	"workbench.action.debug.start": true, "workbench.action.debug.stop": true, "workbench.action.debug.continue": true,
 	"workbench.action.debug.stepOver": true, "workbench.action.debug.stepInto": true, "workbench.action.debug.stepOut": true,
 	"workbench.action.terminal.resizePaneUp": true, "workbench.action.terminal.resizePaneDown": true, "workbench.action.closePanel": true,
-}
-
-type bindingMatch struct {
-	binding *config.Binding
-	partial bool
 }
 
 func (a *App) matchBinding(chord []string) (*config.Binding, bool) {
@@ -1350,11 +1322,6 @@ func (a *App) transformAutoClosed(v *EditorView, ch buffer.Change) {
 
 // docChanged is called after every buffer change of an open document.
 func (a *App) docChanged(d *Document) {
-	for v := range d.views {
-		if v.app != nil {
-			// the auto-close list follows cursor movement implicitly via the next type
-		}
-	}
 	a.scheduleAutoSave()
 	a.outline.docChanged(d)
 }
@@ -1386,16 +1353,6 @@ func (a *App) saveAllDirty() {
 			a.saveDocument(d, false)
 		}
 	}
-}
-
-// sortedDocs returns open documents sorted by path.
-func (a *App) sortedDocs() []*Document {
-	var out []*Document
-	for _, d := range a.docs {
-		out = append(out, d)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Buf.Path < out[j].Buf.Path })
-	return out
 }
 
 // relPath returns path relative to the workspace root when possible.

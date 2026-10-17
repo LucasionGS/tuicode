@@ -42,7 +42,6 @@ func (a *App) openSpecial(p SpecialPage) {
 type WelcomePage struct {
 	app      *App
 	selected int
-	items    []welcomeLink
 }
 
 type welcomeLink struct {

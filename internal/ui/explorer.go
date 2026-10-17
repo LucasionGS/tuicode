@@ -27,7 +27,6 @@ type exRow struct {
 	node  *exNode
 	depth int
 	label string // may be a compacted "a/b/c"
-	last  *exNode
 	input bool
 }
 
@@ -56,8 +55,6 @@ type exEdit struct {
 	parent string
 	isDir  bool
 	rename string // path being renamed
-	depth  int
-	after  int // row index after which the input appears
 }
 
 func newExplorer(a *App) *Explorer {
@@ -75,10 +72,6 @@ func (e *Explorer) setRoot(root string) {
 	e.root = &exNode{path: root, name: filepath.Base(root), isDir: true}
 	e.expanded[root] = true
 	e.refresh()
-}
-
-func (e *Explorer) excluded(rel string, isDir bool) bool {
-	return e.app.excludeMatcher()(rel, isDir)
 }
 
 func (e *Explorer) load(n *exNode) {

@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-runewidth"
 )
@@ -163,15 +161,6 @@ func RuneWidth(r rune) int {
 		return 1
 	}
 	return w
-}
-
-// padRight pads s with spaces to width.
-func padRight(s string, w int) string {
-	n := StrWidth(s)
-	if n >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-n)
 }
 
 func clampInt(v, lo, hi int) int {

@@ -46,7 +46,7 @@ type emmetNode struct {
 func parseEmmet(abbr string) ([]*emmetNode, bool) {
 	var roots []*emmetNode
 	stack := [][]*emmetNode{} // parent chains
-	var siblings *[]*emmetNode = &roots
+	siblings := &roots
 	var last *emmetNode
 	i := 0
 	rs := []rune(abbr)

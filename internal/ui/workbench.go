@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/gdamore/tcell/v2"
 
@@ -401,14 +400,7 @@ func (a *App) drawStatusBar() {
 	}
 	if a.gitRoot != "" {
 		branch := a.gitBranch
-		dirty := false
-		for _, s := range a.gitStatus {
-			if !s.Untracked() || true {
-				dirty = true
-				break
-			}
-		}
-		if dirty {
+		if len(a.gitStatus) > 0 {
 			branch += "*"
 		}
 		left = append(left, statusItem{text: a.Icon(IcoBranch) + " " + branch, cmd: "git.checkout", tooltip: "Checkout Branch/Tag..."})
@@ -428,7 +420,9 @@ func (a *App) drawStatusBar() {
 	}
 	left = append(left, statusItem{text: prob, cmd: "workbench.actions.view.problems", tooltip: "Problems"})
 	if a.lsp != nil {
-		for _, p := range a.lsp.Progress() {
+		// only the first progress item fits in the status bar
+		if progress := a.lsp.Progress(); len(progress) > 0 {
+			p := progress[0]
 			msg := p.Title
 			if p.Message != "" {
 				msg += ": " + p.Message
@@ -437,7 +431,6 @@ func (a *App) drawStatusBar() {
 				msg += fmt.Sprintf(" (%d%%)", p.Percentage)
 			}
 			left = append(left, statusItem{text: "⟳ " + p.Server + " " + msg, cmd: "workbench.action.output.toggleOutput"})
-			break
 		}
 	}
 	if len(a.pendingChord) == 0 && a.statusMsg != "" {
@@ -931,11 +924,4 @@ func (a *App) keyLabel(cmd string) string {
 		}
 	}
 	return a.keyLabels[cmd]
-}
-
-func repeatStr(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	return strings.Repeat(s, n)
 }

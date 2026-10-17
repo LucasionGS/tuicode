@@ -6,7 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"tuicode/internal/buffer"
 	"tuicode/internal/lsp"
 )
 
@@ -279,7 +278,7 @@ func (g *EditorGroup) drawTabs(r Rect, focused bool) {
 			a.cv.Text(tx, r.Y, x+w, icon, styleFB(col, tbg))
 			tx += 2
 		}
-		tx = a.cv.Text(tx, r.Y, x+w, g.tabLabel(v), st)
+		a.cv.Text(tx, r.Y, x+w, g.tabLabel(v), st)
 		// close button or dirty dot
 		cx := x + w - 2
 		dirty := v.special == nil && v.buf().Dirty()
@@ -712,9 +711,4 @@ func (a *App) showDocument(d *Document, preview bool) *EditorView {
 	v := a.newEditorView(d)
 	g.addTab(v, preview)
 	return v
-}
-
-func (a *App) moveSelections(v *EditorView, sels []buffer.Selection) {
-	v.SetSelections(sels, -1)
-	v.ensureVisible()
 }

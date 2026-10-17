@@ -491,9 +491,6 @@ func (v *EditorView) draw(r Rect, focused bool) {
 					}
 				} else {
 					a.cv.Set(x, y, c.ch, st)
-					if c.width == 2 && x+1 < text.X+text.W {
-						// wide rune occupies two cells
-					}
 				}
 			}
 			// indent guides inside leading whitespace
@@ -1016,7 +1013,7 @@ func (v *EditorView) drawMinimap(r Rect) {
 		}
 		for cx := 0; cx < r.W; cx++ {
 			var bits rune
-			var colorKind syntax.Kind = syntax.KText
+			colorKind := syntax.KText
 			counts := map[syntax.Kind]int{}
 			for dy := 0; dy < linesPerRow; dy++ {
 				line := first + y*linesPerRow + dy
@@ -1029,7 +1026,7 @@ func (v *EditorView) drawMinimap(r Rect) {
 					startX := (cx*2 + dx) * charsPerDot
 					// map visual x to columns (approximate for tabs)
 					filled := false
-					var kind syntax.Kind = syntax.KText
+					kind := syntax.KText
 					vx := 0
 					for ci, ch := range l {
 						w := 1

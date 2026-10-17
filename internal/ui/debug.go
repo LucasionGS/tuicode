@@ -106,10 +106,6 @@ func newDebugView(a *App) *DebugView { return &DebugView{app: a} }
 
 //#region Breakpoints
 
-func (a *App) breakpointsFor(path string) []*Breakpoint {
-	return a.breakpoints[path]
-}
-
 func (a *App) toggleBreakpoint(path string, line int) {
 	if path == "" {
 		return

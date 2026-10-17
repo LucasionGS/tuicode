@@ -359,7 +359,7 @@ func (q *QuickInput) draw() {
 			a.cv.TextEllipsis(px+1, cy, maxX-px-1, it.Description, dst)
 		}
 		if right != "" {
-			rst2 := rst.Foreground(th.OverColor("descriptionForeground", rbg))
+			var rst2 tcell.Style
 			if it.Keybinding != "" {
 				rst2 = styleFB(th.C("keybindingLabel.foreground"), th.OverColor("keybindingLabel.background", rbg))
 			} else {

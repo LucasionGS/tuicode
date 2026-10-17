@@ -42,10 +42,9 @@ type Document struct {
 
 	Diags []Diag
 
-	refs      int
-	listener  int
-	views     map[*EditorView]bool
-	diskCheck time.Time
+	refs     int
+	listener int
+	views    map[*EditorView]bool
 	// Untitled documents are numbered.
 	untitledN int
 	// Preview documents (like the welcome page or diffs) are not saved.

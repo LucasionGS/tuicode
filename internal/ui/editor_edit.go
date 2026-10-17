@@ -1043,16 +1043,10 @@ func (v *EditorView) ExpandLineSelection() {
 	for i, s := range v.sels {
 		r := s.Range()
 		start := buffer.Pos{Line: r.Start.Line}
-		endLine := r.End.Line
-		if !s.Empty() && r.End.Col == 0 && r.End.Line > r.Start.Line {
+		// select through the next line start; a selection already ending at a line start grows by a line
+		endLine := r.End.Line + 1
+		if !s.Empty() && r.End.Col == 0 && r.Start.Col != 0 {
 			endLine = r.End.Line
-		} else if !s.Empty() && r.Start.Col == 0 && r.End.Col == 0 {
-			endLine = r.End.Line
-		} else {
-			endLine = r.End.Line + 1
-		}
-		if !s.Empty() && r.Start.Col == 0 && (r.End.Col == 0 && r.End.Line > r.Start.Line) {
-			endLine = r.End.Line + 1
 		}
 		var end buffer.Pos
 		if endLine >= b.LineCount() {

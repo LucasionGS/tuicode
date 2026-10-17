@@ -6,7 +6,6 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"strings"
-	"unicode"
 
 	"tuicode/internal/buffer"
 )
@@ -1230,7 +1229,3 @@ func (v *EditorView) PageMove(dir int, extend bool) {
 }
 
 //#endregion
-
-func isSpaceRune(r rune) bool { return r == ' ' || r == '\t' }
-
-func isUpperRune(r rune) bool { return unicode.IsUpper(r) }

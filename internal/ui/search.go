@@ -21,11 +21,10 @@ import (
 )
 
 type searchMatch struct {
-	line    int
-	col     int // rune column
-	length  int // runes
-	text    string
-	preview string
+	line   int
+	col    int // rune column
+	length int // runes
+	text   string
 }
 
 type searchFile struct {

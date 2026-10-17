@@ -286,11 +286,6 @@ func (a *App) runSaveParticipants(d *Document) {
 			b.ApplyEdits([]buffer.Edit{{Range: buffer.Range{Start: end, End: end}, Text: "\n"}}, nil, "save")
 		}
 	}
-	if eol := a.settings.String("files.eol", lang); eol == "\n" || eol == "\r\n" {
-		if b.Path != "" && !b.Dirty() {
-			// keep the file's existing endings
-		}
-	}
 }
 
 func (a *App) writeDocument(d *Document) bool {

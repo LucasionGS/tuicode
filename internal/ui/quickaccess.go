@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"tuicode/internal/buffer"
-	"tuicode/internal/fuzzy"
 	"tuicode/internal/git"
 	"tuicode/internal/lsp"
 )
@@ -577,12 +576,6 @@ func (a *App) quickOpenInDir(dir string) {
 		a.OpenFile(p, false)
 		a.focusEditor()
 	}})
-}
-
-// matchFile is used by tests and the search view to score paths.
-func matchFile(query, path string) (int, bool) {
-	s, _, ok := fuzzy.MatchPath(query, path)
-	return s, ok
 }
 
 //#endregion

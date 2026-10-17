@@ -10,7 +10,6 @@ import (
 	"tuicode/internal/buffer"
 	"tuicode/internal/lsp"
 	"tuicode/internal/syntax"
-	"tuicode/internal/theme"
 )
 
 // mdSeg is a styled piece of a rendered markdown line.
@@ -22,7 +21,6 @@ type mdSeg struct {
 	ital bool
 	link bool
 	dim  bool
-	hr   bool
 }
 
 type mdLine struct {
@@ -375,7 +373,6 @@ func (a *App) showHover(v *EditorView, p buffer.Pos, mouse bool) {
 	if a.debug != nil && a.debug.state == "stopped" {
 		expr := ""
 		if wr, ok := v.WordAt(p); ok {
-			expr = v.buf().TextRange(wr)
 			// include a leading selector chain like a.b.c
 			l := v.buf().Line(p.Line)
 			s := wr.Start.Col
@@ -707,8 +704,3 @@ func (s *SignatureHelpState) draw() {
 }
 
 //#endregion
-
-// tokenStyleFor is a helper for tests and pages.
-func tokenStyleFor(th *theme.Theme, k syntax.Kind) tcell.Style {
-	return th.Token(k).Apply(styleFB(th.C("editor.foreground"), th.C("editor.background")))
-}
