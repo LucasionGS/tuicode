@@ -81,6 +81,7 @@ type EditorView struct {
 	inlayPending   bool
 	lightbulbLine  int
 	dirtyDiff      *DirtyDiffPeek
+	peek           *PeekView
 	lightbulbKey   [2]int
 
 	dragging   bool

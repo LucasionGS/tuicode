@@ -216,3 +216,35 @@ func TestScreenshotIntelliSense(t *testing.T) {
 	h.snapshot(filepath.Join(out, "signature.json"))
 	h.a.lsp.ShutdownAll()
 }
+
+func TestScreenshotPeek(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT and TUI_LSP")
+	}
+	main := "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(greet(\"a\"))\n\tfmt.Println(greet(\"b\"))\n}\n"
+	lib := "package main\n\n// greet builds a greeting.\nfunc greet(name string) string {\n\treturn \"hello \" + name\n}\n\nfunc other() string {\n\treturn greet(\"c\")\n}\n"
+	dir := tempWorkspace(t, map[string]string{"go.mod": "module demo\n\ngo 1.21\n", "main.go": main, "lib.go": lib})
+	t.Setenv("GOCACHE", filepath.Join(os.Getenv("REAL_HOME"), ".cache", "go-build"))
+	t.Setenv("GOPATH", filepath.Join(os.Getenv("REAL_HOME"), "go"))
+	setSandbox("")
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "main.go")}})
+	v := h.a.ActiveView()
+	for i := 0; i < 80 && h.a.lsp.Client(v.buf()) == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	time.Sleep(time.Second)
+	v.SetCursor(buffer.Pos{Line: 5, Col: 15})
+	h.key(tcell.KeyF12, 0, tcell.ModShift)
+	for i := 0; i < 40 && v.peek == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.settle()
+	h.snapshot(filepath.Join(out, "peek.json"))
+	if v.peek == nil || len(v.peek.items) != 4 {
+		t.Fatalf("peek items: %+v", v.peek)
+	}
+	h.a.lsp.ShutdownAll()
+}

@@ -427,6 +427,9 @@ func (v *EditorView) handleWidgetKey(key, text string, isText bool) bool {
 	if v.codeActions != nil {
 		return v.codeActions.handleKey(key)
 	}
+	if v.peek != nil && v.peek.handleKey(key) {
+		return true
+	}
 	if v.dirtyDiff != nil && key == "escape" {
 		v.dirtyDiff = nil
 		return true

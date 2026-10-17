@@ -729,6 +729,9 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	if v.dirtyDiff != nil {
 		v.dirtyDiff.draw()
 	}
+	if v.peek != nil {
+		v.peek.draw()
+	}
 	a.cv.clip = Rect{0, 0, a.width, a.height}
 }
 

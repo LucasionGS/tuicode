@@ -67,7 +67,7 @@ func (a *App) goToDefinition(v *EditorView, aside bool) {
 			a.openLocation(locs[0])
 			return
 		}
-		a.showLocationPicker("Definitions", locs)
+		a.showPeek(v, "Definitions", locs)
 	})
 }
 
@@ -103,7 +103,7 @@ func (a *App) gotoLocations(v *EditorView, method, what string) {
 			a.openLocation(locs[0])
 			return
 		}
-		a.showLocationPicker(strings.Title(what)+"s", locs)
+		a.showPeek(v, capitalize(what)+"s", locs)
 	})
 }
 
@@ -117,7 +117,7 @@ func (a *App) peekLocations(v *EditorView, method, title string) {
 			a.setStatusMessage("No results")
 			return
 		}
-		a.showLocationPicker(title, locs)
+		a.showPeek(v, title, locs)
 	})
 }
 
@@ -227,7 +227,7 @@ func (a *App) referencesRequest(v *EditorView, cb func([]lsp.Location)) {
 }
 
 func (a *App) peekReferences(v *EditorView) {
-	a.referencesRequest(v, func(locs []lsp.Location) { a.showLocationPicker("References", locs) })
+	a.referencesRequest(v, func(locs []lsp.Location) { a.showPeek(v, "References", locs) })
 }
 
 func (a *App) findAllReferences(v *EditorView) {
@@ -831,4 +831,11 @@ func (a *App) maybeRequestLightbulb(v *EditorView) {
 			v.lightbulbLine = line
 		}
 	})
+}
+
+func capitalize(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
