@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"tuicode/internal/config"
 )
 
 func TestMultiRootWorkspace(t *testing.T) {
@@ -139,4 +141,47 @@ func TestRenameUpdatesImports(t *testing.T) {
 		t.Fatalf("import not updated: %q", h.text())
 	}
 	h.a.lsp.ShutdownAll()
+}
+
+func TestMoreCommands(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "f(x, [y])\nabcd\n", "other/b.txt": "b\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{dir}})
+	h.a.OpenFile(filepath.Join(dir, "a.txt"), false)
+	h.a.focusEditor()
+	v := h.a.ActiveView()
+	v.SetCursor(bpos(0, 6))
+	h.a.RunCommand("editor.action.removeBrackets", nil)
+	if got := v.buf().LineString(0); got != "f(x, y)" {
+		t.Fatalf("remove brackets: %q", got)
+	}
+	v.SetCursor(bpos(1, 2))
+	h.a.RunCommand("editor.action.transpose", nil)
+	if got := v.buf().LineString(1); got != "acbd" {
+		t.Fatalf("transpose: %q", got)
+	}
+	h.a.RunCommand("editor.action.deleteAllLeft", nil)
+	if got := v.buf().LineString(1); got != "d" {
+		t.Fatalf("delete all left: %q", got)
+	}
+	// maximizing a group hides the others until toggled back
+	h.a.RunCommand("workbench.action.splitEditor", nil)
+	h.a.RunCommand("workbench.action.toggleMaximizeEditorGroup", nil)
+	if len(h.a.groups) != 1 {
+		t.Fatalf("maximize: %d groups", len(h.a.groups))
+	}
+	h.a.RunCommand("workbench.action.toggleMaximizeEditorGroup", nil)
+	if len(h.a.groups) != 2 || h.a.activeGroup != 1 {
+		t.Fatalf("restore: %d groups, active %d", len(h.a.groups), h.a.activeGroup)
+	}
+	// adding a folder creates a multi-root workspace that can be saved
+	h.a.addRootFolder(filepath.Join(dir, "other"))
+	if len(h.a.folders()) != 2 {
+		t.Fatalf("folders: %v", h.a.folders())
+	}
+	h.a.workspace.File = filepath.Join(dir, "x.code-workspace")
+	h.a.saveWorkspaceFile()
+	ws, err := config.LoadWorkspace(filepath.Join(dir, "x.code-workspace"))
+	if err != nil || len(ws.Folders) != 2 || ws.Folders[1].Path != filepath.Join(dir, "other") {
+		t.Fatalf("saved workspace: %+v %v", ws, err)
+	}
 }

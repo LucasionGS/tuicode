@@ -85,6 +85,8 @@ type App struct {
 	gitRoot     string
 	workspace   *config.Workspace // open .code-workspace, nil for a single folder
 	lspDisabled bool
+	hiddenGroups []*EditorGroup // the full layout while one group is maximized
+	lastRunTask  *task
 	gitBranch   string
 	gitAhead    int
 	gitBehind   int
@@ -642,6 +644,8 @@ func (a *App) contextKey(key string) any {
 		return v != nil && v.HasSelection()
 	case "editorHasMultipleSelections":
 		return v != nil && len(v.sels) > 1
+	case "hasSearchResult":
+		return len(a.searchV.results) > 0
 	case "activeEditorIsPinned":
 		return v != nil && v.pinned
 	case "editorReadonly":
@@ -1414,7 +1418,7 @@ func (a *App) folders() []config.WorkspaceFolder {
 
 // sessionKey identifies the workspace in the saved state.
 func (a *App) sessionKey() string {
-	if a.workspace != nil {
+	if a.workspace != nil && a.workspace.File != "" {
 		return a.workspace.File
 	}
 	return a.root

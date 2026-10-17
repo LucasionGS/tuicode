@@ -267,7 +267,11 @@ var defaultKeymap = [][3]string{
 	{"ctrl+shift+v", "markdown.showPreview", "editorLangId == markdown"},
 	{"ctrl+k v", "markdown.showPreviewToSide", "editorLangId == markdown"},
 	{"ctrl+j", "workbench.action.togglePanel", ""},
-	{"ctrl+k ctrl+m", "workbench.action.toggleMaximizedPanel", ""},
+	{"ctrl+k ctrl+m", "workbench.action.toggleMaximizeEditorGroup", ""},
+	{"f4", "search.action.focusNextSearchResult", "hasSearchResult"},
+	{"shift+f4", "search.action.focusPreviousSearchResult", "hasSearchResult"},
+	{"ctrl+0", "workbench.action.focusSideBar", ""},
+	{"ctrl+alt+backspace", "editor.action.removeBrackets", "editorTextFocus"},
 	{"ctrl+=", "workbench.action.zoomIn", ""},
 	{"ctrl+-", "workbench.action.zoomOut", ""},
 

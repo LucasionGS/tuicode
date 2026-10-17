@@ -45,6 +45,7 @@ func (a *App) groupRects(r Rect) []Rect {
 
 // removeGroupAt drops a group from the layout, keeping the columns of the others.
 func (a *App) removeGroupAt(i int) {
+	a.hiddenGroups = nil
 	if i < 0 || i >= len(a.groups) {
 		return
 	}
@@ -62,6 +63,7 @@ func (a *App) removeGroupAt(i int) {
 
 // insertGroup adds a group to the right of the active group's column, or below the active group.
 func (a *App) insertGroup(down bool) *EditorGroup {
+	a.hiddenGroups = nil
 	ng := a.newGroup()
 	at := a.activeGroup + 1
 	if down {

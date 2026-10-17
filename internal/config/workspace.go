@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -72,8 +73,42 @@ func LoadWorkspace(path string) (*Workspace, error) {
 	return ws, nil
 }
 
+// SaveWorkspace writes the folders to the workspace file, keeping its other keys. Paths inside the
+// file's folder are stored relative to it.
+func SaveWorkspace(w *Workspace, write func(path string, data []byte, perm os.FileMode) error) error {
+	doc := map[string]any{}
+	if data, err := os.ReadFile(w.File); err == nil {
+		_ = UnmarshalJSONC(data, &doc)
+	}
+	dir := filepath.Dir(w.File)
+	var folders []map[string]any
+	for _, f := range w.Folders {
+		p := f.Path
+		if rel, err := filepath.Rel(dir, p); err == nil && !strings.HasPrefix(rel, "..") {
+			p = filepath.ToSlash(rel)
+		}
+		entry := map[string]any{"path": p}
+		if f.Name != filepath.Base(f.Path) {
+			entry["name"] = f.Name
+		}
+		folders = append(folders, entry)
+	}
+	doc["folders"] = folders
+	if _, ok := doc["settings"]; !ok {
+		doc["settings"] = map[string]any{}
+	}
+	data, err := json.MarshalIndent(doc, "", "\t")
+	if err != nil {
+		return err
+	}
+	return write(w.File, append(data, '\n'), 0o644)
+}
+
 // Name returns the workspace name shown in the title, like "project (Workspace)".
 func (w *Workspace) Name() string {
+	if w.File == "" {
+		return "Untitled"
+	}
 	return strings.TrimSuffix(filepath.Base(w.File), ".code-workspace")
 }
 

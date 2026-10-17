@@ -524,6 +524,27 @@ func (s *SearchView) rebuild() {
 	}
 }
 
+// stepResult opens the next or previous match, like F4 in VS Code.
+func (s *SearchView) stepResult(d int) {
+	if len(s.rows) == 0 {
+		return
+	}
+	i := s.selected
+	for n := 0; n < len(s.rows); n++ {
+		i = (i + d + len(s.rows)) % len(s.rows)
+		if s.rows[i].match >= 0 {
+			s.selected = i
+			s.ensureVisible()
+			s.openRow(i, true, true)
+			return
+		}
+		if s.rows[i].file.collapsed {
+			s.rows[i].file.collapsed = false
+			s.rebuild()
+		}
+	}
+}
+
 func (s *SearchView) openRow(i int, focusEditor bool, preview bool) {
 	if i < 0 || i >= len(s.rows) {
 		return

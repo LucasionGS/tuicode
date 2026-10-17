@@ -272,6 +272,7 @@ func (a *App) runTask(t task) {
 
 // runTaskThen runs a task and calls done with its exit code when it ends.
 func (a *App) runTaskThen(t task, done func(exitCode int)) {
+	a.lastRunTask = &t
 	cwd := a.root
 	if t.Cwd != "" {
 		cwd = a.substituteVars(t.Cwd)

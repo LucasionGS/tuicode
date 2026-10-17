@@ -917,6 +917,7 @@ func (a *App) registerCommands() {
 	//#endregion
 
 	a.registerDebugCommands()
+	a.registerMoreCommands()
 
 	// markdown preview renders the document as formatted text
 	a.cmd("markdown.showPreview", "Markdown", "Open Preview", a.ed(func(v *EditorView) { a.openMarkdownPreview(v, false) }))
