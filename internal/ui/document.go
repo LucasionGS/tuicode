@@ -56,6 +56,9 @@ type Document struct {
 	semVersion int
 	semTimer   *time.Timer
 
+	mdFences       []bool // lines inside fenced code blocks
+	mdFenceVersion int
+
 	blame        []git.BlameInfo
 	blameVersion int
 	blameRunning bool

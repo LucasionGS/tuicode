@@ -864,6 +864,11 @@ func (v *EditorView) foldRangeAt(line int) (Fold, bool) {
 	if f, ok := v.regionRangeAt(line); ok {
 		return f, true
 	}
+	if v.lang() == "markdown" {
+		if f, ok := v.markdownFoldAt(line); ok {
+			return f, true
+		}
+	}
 	ind := v.indentLevel(line)
 	if ind < 0 {
 		return Fold{}, false
@@ -1261,3 +1266,77 @@ func (v *EditorView) PageMove(dir int, extend bool) {
 }
 
 //#endregion
+
+var mdHeadingRe = regexp.MustCompile(`^(#{1,6})(\s|$)`)
+
+// markdownFences marks the lines of fenced code blocks, including the fences.
+func (d *Document) markdownFences() []bool {
+	if d.mdFences != nil && d.mdFenceVersion == d.Buf.Version() {
+		return d.mdFences
+	}
+	n := d.Buf.LineCount()
+	in := make([]bool, n)
+	fence := ""
+	for i := 0; i < n; i++ {
+		t := strings.TrimSpace(d.Buf.LineString(i))
+		switch {
+		case fence == "" && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")):
+			fence = t[:3]
+			in[i] = true
+		case fence != "":
+			in[i] = true
+			if strings.HasPrefix(t, fence) && strings.Trim(t, fence[:1]) == "" {
+				fence = ""
+			}
+		}
+	}
+	d.mdFences, d.mdFenceVersion = in, d.Buf.Version()
+	return in
+}
+
+// markdownFoldAt folds a heading's section or a fenced code block, like VS Code's markdown folding.
+func (v *EditorView) markdownFoldAt(line int) (Fold, bool) {
+	b := v.buf()
+	fences := v.doc.markdownFences()
+	text := b.LineString(line)
+	if fences[line] {
+		// a block folds from its opening fence
+		t := strings.TrimSpace(text)
+		if (line == 0 || !fences[line-1]) && (strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~")) {
+			end := line + 1
+			for end < len(fences) && fences[end] {
+				t2 := strings.TrimSpace(b.LineString(end))
+				if strings.HasPrefix(t2, t[:3]) && strings.Trim(t2, t[:1]) == "" {
+					break
+				}
+				end++
+			}
+			if end < len(fences) && end > line {
+				return Fold{line, end}, true
+			}
+		}
+		return Fold{}, false
+	}
+	m := mdHeadingRe.FindStringSubmatch(text)
+	if m == nil {
+		return Fold{}, false
+	}
+	level := len(m[1])
+	end := line
+	for i := line + 1; i < b.LineCount(); i++ {
+		if !fences[i] {
+			if hm := mdHeadingRe.FindStringSubmatch(b.LineString(i)); hm != nil && len(hm[1]) <= level {
+				break
+			}
+		}
+		end = i
+	}
+	// trailing blank lines stay visible
+	for end > line && strings.TrimSpace(b.LineString(end)) == "" {
+		end--
+	}
+	if end <= line {
+		return Fold{}, false
+	}
+	return Fold{line, end}, true
+}

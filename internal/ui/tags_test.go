@@ -206,3 +206,20 @@ func TestCodeLensRows(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkdownFolding(t *testing.T) {
+	md := "# Title\n\nIntro\n\n## Install\n\n```bash\n# not a heading\nmake\n```\n\n## Usage\n\ntext\n"
+	dir := tempWorkspace(t, map[string]string{"README.md": md})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "README.md")}})
+	v := h.a.ActiveView()
+	cases := map[int][2]int{0: {0, 13}, 4: {4, 9}, 6: {6, 9}, 11: {11, 13}}
+	for line, want := range cases {
+		f, ok := v.foldRangeAt(line)
+		if !ok || f.Start != want[0] || f.End != want[1] {
+			t.Errorf("line %d: got %v %v, want %v", line, f, ok, want)
+		}
+	}
+	if _, ok := v.foldRangeAt(7); ok {
+		t.Error("a comment in a code block folded like a heading")
+	}
+}
