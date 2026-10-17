@@ -345,13 +345,32 @@ func (a *App) completionStartFor(v *EditorView, list *lsp.CompletionList, def bu
 	if len(list.Items) == 0 {
 		return def
 	}
-	if te, ok := list.Items[0].Edit(); ok {
+	// items can have their own ranges (tsserver replaces "." for optional chaining items), so use the
+	// start most items agree on
+	counts := map[buffer.Pos]int{}
+	best, bestN := def, 0
+	for i := range list.Items {
+		if i >= 200 {
+			break
+		}
+		te, ok := list.Items[i].Edit()
+		if !ok {
+			counts[def]++
+			if counts[def] > bestN {
+				best, bestN = def, counts[def]
+			}
+			continue
+		}
 		p := a.lsp.FromLSP(v.buf(), te.Range.Start)
-		if p.Line == def.Line && p.Col <= v.Cursor().Col {
-			return p
+		if p.Line != def.Line || p.Col > v.Cursor().Col {
+			continue
+		}
+		counts[p]++
+		if counts[p] > bestN {
+			best, bestN = p, counts[p]
 		}
 	}
-	return def
+	return best
 }
 
 // wordCompletions collects words from open documents of the same language.
@@ -752,7 +771,12 @@ func (c *Completion) draw() {
 	a := v.app
 	th := a.theme
 	n := len(c.filtered)
-	cx, cy, ok := v.screenPos(c.start)
+	// the widget lines up with the typed word even when items replace more (tsserver replaces the ".")
+	anchor := c.start
+	if ws := v.wordStart(v.Cursor()); ws.Line == anchor.Line && anchor.Less(ws) {
+		anchor = ws
+	}
+	cx, cy, ok := v.screenPos(anchor)
 	if !ok {
 		return
 	}
