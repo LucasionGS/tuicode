@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -90,6 +92,11 @@ func (v *EditorView) textMouse(ev MouseEvent, row vpos, cells []rowCell, indent 
 		alt, ctrl = ctrl, alt
 	}
 	if ctrl && !shift && ev.Clicks == 1 {
+		if url := v.urlAt(p); url != "" && a.settings.Bool("editor.links", "") {
+			openExternal(url)
+			a.setStatusMessage("Opening " + url)
+			return
+		}
 		v.SetCursor(p)
 		a.pushNav()
 		a.goToDefinition(v, false)
@@ -497,4 +504,19 @@ func (a *App) showEditorContextMenu(v *EditorView, x, y int) {
 		{Label: "Command Palette...", Command: "workbench.action.showCommands"},
 	}
 	a.openContextMenu(x, y, items)
+}
+
+var urlRe = regexp.MustCompile(`https?://[^\s"'<>()\[\]{}` + "`" + `]+`)
+
+// urlAt returns the URL under p, if any.
+func (v *EditorView) urlAt(p buffer.Pos) string {
+	line := v.buf().LineString(p.Line)
+	for _, m := range urlRe.FindAllStringIndex(line, -1) {
+		s := len([]rune(line[:m[0]]))
+		e := len([]rune(line[:m[1]]))
+		if p.Col >= s && p.Col < e {
+			return strings.TrimRight(line[m[0]:m[1]], ".,;:")
+		}
+	}
+	return ""
 }

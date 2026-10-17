@@ -63,6 +63,9 @@ type Manager struct {
 	OnStatus      func()
 	// Configuration answers workspace/configuration for a section.
 	Configuration func(section string) any
+	// OnMissing is called once per language when no server is installed for it.
+	OnMissing       func(lang *syntax.Language)
+	missingNotified map[string]bool
 
 	// Overrides maps language ids to server commands (from settings). An empty slice disables.
 	Overrides map[string][]string
@@ -368,6 +371,15 @@ func (m *Manager) Open(buf *buffer.Buffer) {
 	lang := syntax.ByID(buf.LanguageID)
 	cmd := m.ServerCommand(lang)
 	if cmd == nil {
+		if _, overridden := m.Overrides[lang.ID]; len(lang.Servers) > 0 && !overridden && m.OnMissing != nil {
+			if m.missingNotified == nil {
+				m.missingNotified = map[string]bool{}
+			}
+			if !m.missingNotified[lang.ID] {
+				m.missingNotified[lang.ID] = true
+				m.OnMissing(lang)
+			}
+		}
 		return
 	}
 	c := m.clientFor(cmd)

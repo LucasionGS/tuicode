@@ -167,6 +167,7 @@ var Defaults = map[string]any{
 	"tuicode.importVSCodeKeybindings":            true,
 	"tuicode.lsp.enabled":                        true,
 	"tuicode.lsp.servers":                        map[string]any{},
+	"tuicode.lsp.promptInstall":                  true,
 	"tuicode.mouse":                              true,
 	"tuicode.titleBar":                           true,
 	"tuicode.truecolor":                          "auto",

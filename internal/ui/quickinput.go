@@ -190,13 +190,13 @@ func (q *QuickInput) handleKey(key, text string, isText bool) bool {
 	case "enter":
 		q.accept()
 		return true
-	case "down", "ctrl+n", "ctrl+j":
+	case "down", "ctrl+n", "ctrl+tab":
 		if len(q.filtered) > 0 {
 			q.selected = (q.selected + 1) % len(q.filtered)
 			q.notifySelect()
 		}
 		return true
-	case "up", "ctrl+shift+n", "ctrl+k":
+	case "up", "ctrl+shift+n", "ctrl+shift+tab":
 		if len(q.filtered) > 0 {
 			q.selected = (q.selected - 1 + len(q.filtered)) % len(q.filtered)
 			q.notifySelect()

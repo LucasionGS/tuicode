@@ -15,6 +15,7 @@ import (
 	"tuicode/internal/config"
 	"tuicode/internal/git"
 	"tuicode/internal/lsp"
+	"tuicode/internal/syntax"
 	"tuicode/internal/theme"
 )
 
@@ -1245,6 +1246,22 @@ func (a *App) setupLSP() {
 			v.SetSelections([]buffer.Selection{{Anchor: r.Start, Active: r.End}}, 0)
 			v.ensurePosVisible(r.Start, true)
 		}
+	}
+	m.OnMissing = func(lang *syntax.Language) {
+		if !a.settings.Bool("tuicode.lsp.promptInstall", "") {
+			return
+		}
+		server := lang.Servers[0][0]
+		hint := installHint(server)
+		msg := fmt.Sprintf("No language server found for %s. Install %s for IntelliSense.", lang.Name, server)
+		var actions []NotifyAction
+		if hint != "" {
+			actions = append(actions, NotifyAction{Label: "Install", Run: func() { a.terminals.runText(hint) }})
+		}
+		actions = append(actions, NotifyAction{Label: "Don't Show Again", Run: func() {
+			_ = setUserSetting(a, "tuicode.lsp.promptInstall", false)
+		}})
+		a.notify(NotifyInfo, msg, actions...)
 	}
 	m.Configuration = func(section string) any {
 		if section == "" {
