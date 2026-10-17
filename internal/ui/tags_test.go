@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"tuicode/internal/buffer"
+	"tuicode/internal/lsp"
 )
 
 func TestAutoCloseTag(t *testing.T) {
@@ -165,5 +166,43 @@ func TestPinnedTabs(t *testing.T) {
 	h.a.RunCommand("workbench.action.closeEditorsInGroup", nil)
 	if len(g.tabs) != 0 {
 		t.Fatalf("second close all: %d tabs", len(g.tabs))
+	}
+}
+
+func TestCodeLensRows(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "one\ntwo\nthree\nfour\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "a.txt")}})
+	v := h.a.ActiveView()
+	v.setLenses(map[int][]*codeLens{
+		0: {{line: 0, command: &lsp.Command{Title: "2 references"}}},
+		2: {{line: 2, command: &lsp.Command{Title: "run test"}}, {line: 2, command: &lsp.Command{Title: "debug test"}}},
+	})
+	h.flush()
+	scr := h.screen()
+	joined := strings.Join(scr, "\n")
+	if !strings.Contains(joined, "2 references") || !strings.Contains(joined, "run test | debug test") {
+		h.dump()
+		t.Fatal("lens rows not drawn")
+	}
+	if v.totalRows() != 7 {
+		t.Fatalf("total rows: %d", v.totalRows())
+	}
+	// moving across lens rows lands on text lines only
+	v.SetCursor(buffer.Pos{Line: 1, Col: 1})
+	h.key(tcell.KeyDown, 0, 0)
+	if v.Cursor().Line != 2 {
+		t.Fatalf("down: %v", v.Cursor())
+	}
+	h.key(tcell.KeyUp, 0, 0)
+	h.key(tcell.KeyUp, 0, 0)
+	if v.Cursor().Line != 0 {
+		t.Fatalf("up: %v", v.Cursor())
+	}
+	for i := 0; i < len(scr); i++ {
+		if strings.Contains(scr[i], "2 references") {
+			if !strings.Contains(scr[i+1], "one") {
+				t.Fatalf("lens not above its line: %q / %q", scr[i], scr[i+1])
+			}
+		}
 	}
 }

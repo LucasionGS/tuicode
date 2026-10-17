@@ -34,6 +34,7 @@ type span struct {
 func (v *EditorView) buildRow(line, seg int) ([]rowCell, int) {
 	b := v.buf()
 	l := b.Line(line)
+	seg = max(seg, 0)
 	segs := v.segments(line)
 	start := segs[seg]
 	end := v.segEnd(line, seg)
@@ -147,7 +148,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		v.topLine = v.prevVisibleLine(v.topLine)
 		v.topSeg = 0
 	}
-	if v.topSeg >= len(v.segments(v.topLine)) {
+	if v.topSeg >= len(v.segments(v.topLine)) || v.topSeg < -v.lensRows(v.topLine) {
 		v.topSeg = 0
 	}
 
@@ -187,6 +188,7 @@ func (v *EditorView) draw(r Rect, focused bool) {
 	bracketColors := a.settings.Bool("editor.bracketPairColorization.enabled", "")
 	frameLine := a.currentFrameLine(v)
 	a.maybeRequestInlayHints(v)
+	a.maybeRequestCodeLens(v)
 	a.maybeRequestLightbulb(v)
 	if v.doc.semVersion != v.buf().Version() && v.doc.semTimer == nil {
 		a.scheduleSemanticTokens(v.doc)
@@ -228,6 +230,15 @@ func (v *EditorView) draw(r Rect, focused bool) {
 		line := row.line
 		if line >= b.LineCount() {
 			break
+		}
+		if row.seg < 0 {
+			v.drawLensRow(line, y)
+			next, ok := v.nextRow(row)
+			if !ok {
+				break
+			}
+			row = next
+			continue
 		}
 		isCurLine := line == cur.Line
 		rowBg := bgc
@@ -897,7 +908,7 @@ func isClosingLine(s string) bool {
 
 // computeSticky finds the scope header lines for sticky scroll.
 func (v *EditorView) computeSticky() []int {
-	if v.topLine == 0 && v.topSeg == 0 {
+	if v.topLine == 0 && v.topSeg <= 0 {
 		return nil
 	}
 	maxN := v.app.settings.Int("editor.stickyScroll.maxLineCount", "", 5)

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+
+	"tuicode/internal/lsp"
 )
 
 // TestRandomInput drives the workbench with random keys and mouse events to catch panics.
@@ -48,6 +50,15 @@ func TestRandomInput(t *testing.T) {
 	mods := []tcell.ModMask{0, tcell.ModShift, tcell.ModCtrl, tcell.ModAlt, tcell.ModCtrl | tcell.ModShift, tcell.ModAlt | tcell.ModShift}
 	for i := 0; i < n; i++ {
 		var ev tcell.Event
+		// code lens rows appear and disappear like they do with a language server
+		if v := h.a.ActiveView(); v != nil && v.special == nil && rng.Intn(60) == 0 {
+			m := map[int][]*codeLens{}
+			for k := rng.Intn(4); k > 0; k-- {
+				line := rng.Intn(v.buf().LineCount())
+				m[line] = append(m[line], &codeLens{line: line, command: &lsp.Command{Title: "lens"}})
+			}
+			v.setLenses(m)
+		}
 		switch r := rng.Intn(10); {
 		case r < 4:
 			ev = tcell.NewEventKey(tcell.KeyRune, runes[rng.Intn(len(runes))], 0)

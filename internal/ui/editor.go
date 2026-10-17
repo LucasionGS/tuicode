@@ -3,6 +3,7 @@ package ui
 import (
 	"regexp"
 	"sort"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"strings"
@@ -66,6 +67,11 @@ type EditorView struct {
 	highlightsPos     buffer.Pos
 	inlayHints        map[int][]inlay
 	inlayVersion      int
+	lenses            map[int][]*codeLens // code lenses by line
+	lensVersion       int
+	lensPending       bool
+	lensTimer         bool
+	lensAsked         time.Time
 
 	preview bool
 	pinned  bool
@@ -105,7 +111,7 @@ type inlay struct {
 }
 
 func (a *App) newEditorView(d *Document) *EditorView {
-	v := &EditorView{app: a, doc: d, lightbulbLine: -1, lightbulbKey: [2]int{-1, -1}}
+	v := &EditorView{app: a, doc: d, lightbulbLine: -1, lightbulbKey: [2]int{-1, -1}, lensVersion: -1}
 	v.sels = []buffer.Selection{buffer.Caret(buffer.Pos{})}
 	v.prefX = []int{-1}
 	v.wrap = a.settings.String("editor.wordWrap", d.Lang.ID) != "off"
@@ -590,6 +596,8 @@ func (v *EditorView) prevVisibleLine(line int) int {
 	return n
 }
 
+// Rows with a negative seg are code lens rows drawn above their line.
+
 func (v *EditorView) nextRow(p vpos) (vpos, bool) {
 	if p.seg+1 < len(v.segments(p.line)) {
 		return vpos{p.line, p.seg + 1}, true
@@ -598,11 +606,11 @@ func (v *EditorView) nextRow(p vpos) (vpos, bool) {
 	if n >= v.buf().LineCount() {
 		return p, false
 	}
-	return vpos{n, 0}, true
+	return vpos{n, -v.lensRows(n)}, true
 }
 
 func (v *EditorView) prevRow(p vpos) (vpos, bool) {
-	if p.seg > 0 {
+	if p.seg > -v.lensRows(p.line) {
 		return vpos{p.line, p.seg - 1}, true
 	}
 	if p.line == 0 {
@@ -654,26 +662,26 @@ func vposLess(a, b vpos) bool {
 
 // totalRows returns the number of visual rows in the document.
 func (v *EditorView) totalRows() int {
-	if !v.wrap && len(v.folds) == 0 {
+	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
 		return v.buf().LineCount()
 	}
 	n := 0
 	for line := 0; line < v.buf().LineCount(); line = v.nextVisibleLine(line) {
-		n += len(v.segments(line))
+		n += len(v.segments(line)) + v.lensRows(line)
 	}
 	return n
 }
 
 // rowIndex returns the index of a visual row from the document start.
 func (v *EditorView) rowIndex(p vpos) int {
-	if !v.wrap && len(v.folds) == 0 {
+	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
 		return p.line
 	}
 	n := 0
 	for line := 0; line < p.line && line < v.buf().LineCount(); line = v.nextVisibleLine(line) {
-		n += len(v.segments(line))
+		n += len(v.segments(line)) + v.lensRows(line)
 	}
-	return n + p.seg
+	return n + p.seg + v.lensRows(p.line)
 }
 
 // rowAtIndex returns the visual row at index i.
@@ -681,15 +689,16 @@ func (v *EditorView) rowAtIndex(i int) vpos {
 	if i <= 0 {
 		return vpos{0, 0}
 	}
-	if !v.wrap && len(v.folds) == 0 {
+	if !v.wrap && len(v.folds) == 0 && len(v.lenses) == 0 {
 		return vpos{min(i, v.buf().LineCount()-1), 0}
 	}
 	n := 0
 	last := vpos{0, 0}
 	for line := 0; line < v.buf().LineCount(); line = v.nextVisibleLine(line) {
-		segs := len(v.segments(line))
+		lens := v.lensRows(line)
+		segs := len(v.segments(line)) + lens
 		if n+segs > i {
-			return vpos{line, i - n}
+			return vpos{line, i - n - lens}
 		}
 		n += segs
 		last = vpos{line, segs - 1}
@@ -783,6 +792,9 @@ func (v *EditorView) ensurePosVisible(p buffer.Pos, center bool) {
 				break
 			}
 			cur = prev
+		}
+		if cur.seg == 0 && v.lensRows(cur.line) > 0 {
+			cur.seg = -1 // show the line's code lens too
 		}
 		if vposLess(cur, top) || cur == top {
 			v.setTop(cur)
@@ -1074,6 +1086,7 @@ func (v *EditorView) visualXInRow(line, col int) int {
 }
 
 func (v *EditorView) posAtRowX(row vpos, x int) buffer.Pos {
+	row.seg = max(row.seg, 0)
 	segs := v.segments(row.line)
 	start := segs[row.seg]
 	end := v.segEnd(row.line, row.seg)
@@ -1117,6 +1130,22 @@ func (v *EditorView) MoveVertical(dy int, extend bool) {
 				next, ok = v.nextRow(row)
 			}
 			if !ok {
+				break
+			}
+			// the cursor never rests on a code lens row
+			for next.seg < 0 {
+				if dy > 0 {
+					next.seg = 0
+					break
+				}
+				prev, ok := v.prevRow(next)
+				if !ok {
+					next.seg = 0
+					break
+				}
+				next = prev
+			}
+			if next == row {
 				break
 			}
 			row = next

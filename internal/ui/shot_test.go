@@ -303,3 +303,26 @@ func TestScreenshotCallHierarchy(t *testing.T) {
 	}
 	h.a.lsp.ShutdownAll()
 }
+
+func TestScreenshotCodeLens(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT and TUI_LSP")
+	}
+	wd, _ := os.Getwd()
+	root := filepath.Dir(filepath.Dir(wd))
+	_ = os.Chdir(root)
+	defer os.Chdir(wd)
+	h := newHarness(t, 150, 30, Options{Paths: []string{filepath.Join(root, "go.mod")}})
+	v := h.a.ActiveView()
+	for i := 0; i < 100 && len(v.lenses) == 0; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.settle()
+	h.snapshot(filepath.Join(out, "lens.json"))
+	if len(v.lenses) == 0 {
+		t.Error("no code lenses")
+	}
+	h.a.lsp.ShutdownAll()
+}

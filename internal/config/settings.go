@@ -58,6 +58,7 @@ var Defaults = map[string]any{
 	"editor.cursorBlinking":                       "blink",
 	"editor.autoClosingBrackets":                  "languageDefined",
 	"editor.linkedEditing":                        false,
+	"editor.codeLens":                             true,
 	"workbench.editor.preventPinnedEditorClose":   "keyboardAndMouse",
 	"html.autoClosingTags":                        true,
 	"javascript.autoClosingTags":                  true,
