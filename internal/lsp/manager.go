@@ -591,6 +591,30 @@ func (m *Manager) ShutdownAll() {
 	}
 }
 
+// SetDiagnostics stores diagnostics from a source other than a server, such as a task's problem matcher.
+// Columns are rune offsets.
+func (m *Manager) SetDiagnostics(path, source string, diags []Diagnostic) {
+	if m.diags[path] == nil {
+		m.diags[path] = map[string]*FileDiagnostics{}
+	}
+	m.diags[path][source] = &FileDiagnostics{Path: path, Diagnostics: diags, Encoding: "utf-32", Server: source}
+	if m.OnDiagnostics != nil {
+		m.OnDiagnostics(path)
+	}
+}
+
+// ClearSource removes every diagnostic stored under source.
+func (m *Manager) ClearSource(source string) {
+	for path, bySource := range m.diags {
+		if _, ok := bySource[source]; ok {
+			delete(bySource, source)
+			if m.OnDiagnostics != nil {
+				m.OnDiagnostics(path)
+			}
+		}
+	}
+}
+
 // Diagnostics returns all diagnostics for a path across servers.
 func (m *Manager) Diagnostics(path string) []*FileDiagnostics {
 	var out []*FileDiagnostics

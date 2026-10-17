@@ -20,6 +20,7 @@ type task struct {
 	Group     string
 	IsDefault bool
 	Source    string
+	Matchers  []*problemMatcher
 }
 
 type tasksFile struct {
@@ -37,6 +38,7 @@ type tasksFile struct {
 		Linux *struct {
 			Command string `json:"command"`
 		} `json:"linux"`
+		ProblemMatcher json.RawMessage `json:"problemMatcher"`
 	} `json:"tasks"`
 }
 
@@ -111,7 +113,7 @@ func (a *App) collectTasks() []task {
 						}
 					}
 				}
-				tk := task{Label: label, Command: cmd, Cwd: t.Options.Cwd, Source: "tasks.json"}
+				tk := task{Label: label, Command: cmd, Cwd: t.Options.Cwd, Source: "tasks.json", Matchers: parseProblemMatchers(t.ProblemMatcher)}
 				var gs string
 				if json.Unmarshal(t.Group, &gs) == nil {
 					tk.Group = gs
@@ -212,22 +214,24 @@ func (a *App) collectTasks() []task {
 			case "run":
 				g = "run"
 			}
-			out = append(out, task{Label: "make: " + n, Command: "make " + n, Group: g, Source: "Makefile"})
+			out = append(out, task{Label: "make: " + n, Command: "make " + n, Group: g, Source: "Makefile", Matchers: []*problemMatcher{builtinMatchers["gcc"], builtinMatchers["go"]}})
 		}
 	}
 	if fileExists(filepath.Join(a.root, "go.mod")) {
+		goM := []*problemMatcher{builtinMatchers["go"]}
 		out = append(out,
-			task{Label: "go: build", Command: "go build ./...", Group: "build", Source: "go"},
-			task{Label: "go: test", Command: "go test ./...", Group: "test", Source: "go"},
-			task{Label: "go: run", Command: "go run .", Group: "run", Source: "go"},
-			task{Label: "go: vet", Command: "go vet ./...", Source: "go"},
+			task{Label: "go: build", Command: "go build ./...", Group: "build", Source: "go", Matchers: goM},
+			task{Label: "go: test", Command: "go test ./...", Group: "test", Source: "go", Matchers: goM},
+			task{Label: "go: run", Command: "go run .", Group: "run", Source: "go", Matchers: goM},
+			task{Label: "go: vet", Command: "go vet ./...", Source: "go", Matchers: goM},
 		)
 	}
 	if fileExists(filepath.Join(a.root, "Cargo.toml")) {
+		rustM := []*problemMatcher{builtinMatchers["rustc"]}
 		out = append(out,
-			task{Label: "cargo: build", Command: "cargo build", Group: "build", Source: "cargo"},
-			task{Label: "cargo: test", Command: "cargo test", Group: "test", Source: "cargo"},
-			task{Label: "cargo: run", Command: "cargo run", Group: "run", Source: "cargo"},
+			task{Label: "cargo: build", Command: "cargo build", Group: "build", Source: "cargo", Matchers: rustM},
+			task{Label: "cargo: test", Command: "cargo test", Group: "test", Source: "cargo", Matchers: rustM},
+			task{Label: "cargo: run", Command: "cargo run", Group: "run", Source: "cargo", Matchers: rustM},
 		)
 	}
 	if fileExists(filepath.Join(a.root, "pubspec.yaml")) {
@@ -240,18 +244,18 @@ func (a *App) collectTasks() []task {
 }
 
 func (a *App) runTask(t task) {
+	a.runTaskThen(t, nil)
+}
+
+// runTaskThen runs a task and calls done with its exit code when it ends.
+func (a *App) runTaskThen(t task, done func(exitCode int)) {
 	cwd := a.root
 	if t.Cwd != "" {
 		cwd = a.substituteVars(t.Cwd)
 	}
 	cmd := a.substituteVars(t.Command)
+	a.terminals.runTask(t, cmd, cwd, done)
 	a.showPanel("terminal")
-	a.terminals.newTerminal(cwd)
-	if cur := a.terminals.current(); cur != nil {
-		cur.name = "Task - " + t.Label
-		cur.custom = true
-	}
-	a.terminals.runText(cmd)
 	a.output.append("Tasks", "Running task '"+t.Label+"': "+cmd)
 }
 

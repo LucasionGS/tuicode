@@ -353,13 +353,37 @@ func (a *App) launch(raw map[string]any, noDebug bool) {
 		a.notify(NotifyError, err.Error())
 		return
 	}
-	if v, ok := cfg["preLaunchTask"].(string); ok && v != "" {
+	if v, ok := cfg["preLaunchTask"].(string); ok && v != "" && raw["__preLaunchDone"] == nil {
 		for _, t := range a.collectTasks() {
-			if t.Label == v {
-				a.runTask(t)
+			if t.Label != v {
+				continue
 			}
+			// run the task first and launch once it finished, like VS Code
+			again := map[string]any{"__preLaunchDone": true}
+			for k, x := range raw {
+				again[k] = x
+			}
+			a.runTaskThen(t, func(code int) {
+				if code == 0 {
+					a.launch(again, noDebug)
+					return
+				}
+				a.showDialog(fmt.Sprintf("The preLaunchTask '%s' terminated with exit code %d.", v, code), "",
+					[]string{"Debug Anyway", "Show Problems", "Abort"}, func(choice int) {
+						switch choice {
+						case 0:
+							a.launch(again, noDebug)
+						case 1:
+							a.showPanel("problems")
+						}
+					})
+			})
+			return
 		}
+		a.notify(NotifyError, "Could not find the task '"+v+"'.")
+		return
 	}
+	delete(cfg, "__preLaunchDone")
 	if noDebug {
 		cfg["noDebug"] = true
 	}

@@ -22,30 +22,47 @@ type Terminal struct {
 
 	// OnOutput is called (from a background goroutine) after output was processed.
 	OnOutput func()
+	// OnData receives a copy of the raw output (from a background goroutine), before it is processed.
+	OnData func([]byte)
 	// OnExit is called when the process exits.
 	OnExit func()
 }
 
 // Start launches shell (with args) in dir.
 func Start(shell string, args []string, dir string, env []string, cols, rows int) (*Terminal, error) {
+	t := Prepare(shell, args, dir, env, cols, rows)
+	if err := t.Run(); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+// Prepare creates a terminal without starting it, so callbacks can be set before any output is read.
+func Prepare(shell string, args []string, dir string, env []string, cols, rows int) *Terminal {
 	cmd := exec.Command(shell, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Env = append(cmd.Env, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=tuicode")
-	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
-	if err != nil {
-		return nil, err
-	}
 	t := &Terminal{
 		Emulator: New(cols, rows),
 		Name:     filepath.Base(shell),
 		Shell:    shell,
 		cmd:      cmd,
-		pty:      f,
 	}
 	t.Emulator.Reply = func(b []byte) { t.WriteInput(b) }
+	return t
+}
+
+// Run starts a prepared terminal's process.
+func (t *Terminal) Run() error {
+	cols, rows := t.Emulator.Size()
+	f, err := pty.StartWithSize(t.cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	if err != nil {
+		return err
+	}
+	t.pty = f
 	go t.readLoop()
-	return t, nil
+	return nil
 }
 
 func (t *Terminal) readLoop() {
@@ -53,6 +70,9 @@ func (t *Terminal) readLoop() {
 	for {
 		n, err := t.pty.Read(buf)
 		if n > 0 {
+			if t.OnData != nil {
+				t.OnData(append([]byte(nil), buf[:n]...))
+			}
 			t.Emulator.Write(buf[:n])
 			if t.OnOutput != nil {
 				t.OnOutput()
@@ -67,6 +87,14 @@ func (t *Terminal) readLoop() {
 	if t.OnExit != nil {
 		t.OnExit()
 	}
+}
+
+// ExitCode returns the exit status of the process once it has ended (-1 when it was killed).
+func (t *Terminal) ExitCode() int {
+	if t.cmd.ProcessState == nil {
+		return 0
+	}
+	return t.cmd.ProcessState.ExitCode()
 }
 
 // Exited reports whether the shell process has ended.

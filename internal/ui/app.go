@@ -79,20 +79,21 @@ type App struct {
 	screen tcell.Screen
 	cv     *Canvas
 
-	theme     *theme.Theme
-	settings  *config.Settings
-	root      string
-	gitRoot   string
-	workspace *config.Workspace // open .code-workspace, nil for a single folder
-	gitBranch string
-	gitAhead  int
-	gitBehind int
-	gitHasUp  bool
-	gitStatus []git.FileStatus
-	gitByPath map[string]git.FileStatus
-	gitBusy   bool
-	lsp       *lsp.Manager
-	nerdIcons bool
+	theme       *theme.Theme
+	settings    *config.Settings
+	root        string
+	gitRoot     string
+	workspace   *config.Workspace // open .code-workspace, nil for a single folder
+	lspDisabled bool
+	gitBranch   string
+	gitAhead    int
+	gitBehind   int
+	gitHasUp    bool
+	gitStatus   []git.FileStatus
+	gitByPath   map[string]git.FileStatus
+	gitBusy     bool
+	lsp         *lsp.Manager
+	nerdIcons   bool
 
 	commands       map[string]*Command
 	bindings       []config.Binding
@@ -283,9 +284,9 @@ func New(opts Options) (*App, error) {
 	a.menu = newMenuBar(a)
 	a.debugView = newDebugView(a)
 
-	if !opts.NoLSP && a.settings.Bool("tuicode.lsp.enabled", "") {
-		a.setupLSP()
-	}
+	// the manager also holds task diagnostics, so it exists even when servers are disabled
+	a.lspDisabled = opts.NoLSP || !a.settings.Bool("tuicode.lsp.enabled", "")
+	a.setupLSP()
 	a.refreshGit()
 
 	for _, f := range files {
@@ -1232,6 +1233,7 @@ func gitLetter(st git.FileStatus) string {
 
 func (a *App) setupLSP() {
 	m := lsp.NewManager(a.root, a.Post)
+	m.Disabled = a.lspDisabled
 	if a.workspace != nil {
 		for _, f := range a.workspace.Folders {
 			m.Folders = append(m.Folders, f.Path)

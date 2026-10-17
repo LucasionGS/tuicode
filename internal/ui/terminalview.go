@@ -28,6 +28,7 @@ type TermInstance struct {
 	rect      Rect
 	procName  string
 	procCheck time.Time
+	task      *taskRun // set when the terminal runs a task
 	id        int
 	// selection in absolute rows (negative = scrollback)
 	selActive bool
@@ -113,6 +114,12 @@ func (tp *TerminalPanel) rebuildFlat() {
 }
 
 func (tp *TerminalPanel) start(dir string) *TermInstance {
+	shell, args := tp.shell()
+	return tp.startProc(dir, shell, args)
+}
+
+// startProc starts a program in a new terminal instance.
+func (tp *TerminalPanel) startProc(dir, shell string, args []string, prepare ...func(*TermInstance)) *TermInstance {
 	a := tp.app
 	if dir == "" {
 		dir = a.settings.String("terminal.integrated.cwd", "")
@@ -123,7 +130,6 @@ func (tp *TerminalPanel) start(dir string) *TermInstance {
 			dir, _ = os.Getwd()
 		}
 	}
-	shell, args := tp.shell()
 	cols, rows := 80, 24
 	if !tp.rect.Empty() {
 		cols, rows = max(tp.rect.W, 10), max(tp.rect.H, 2)
@@ -134,11 +140,7 @@ func (tp *TerminalPanel) start(dir string) *TermInstance {
 			env = append(env, k+"="+s)
 		}
 	}
-	t, err := term.Start(shell, args, dir, env, cols, rows)
-	if err != nil {
-		a.notify(NotifyError, "The terminal process failed to launch: "+err.Error())
-		return nil
-	}
+	t := term.Prepare(shell, args, dir, env, cols, rows)
 	tp.nextID++
 	ti := &TermInstance{t: t, name: filepath.Base(shell), id: tp.nextID}
 	t.MaxScrollback = a.settings.Int("terminal.integrated.scrollback", "", 1000)
@@ -150,6 +152,13 @@ func (tp *TerminalPanel) start(dir string) *TermInstance {
 	t.OnExit = func() { a.Post(func() { tp.onExit(ti) }) }
 	t.Bell = func() {}
 	t.OnTitle = func(title string) {}
+	for _, fn := range prepare {
+		fn(ti)
+	}
+	if err := t.Run(); err != nil {
+		a.notify(NotifyError, "The terminal process failed to launch: "+err.Error())
+		return nil
+	}
 	return ti
 }
 
@@ -237,6 +246,10 @@ func (tp *TerminalPanel) remove(ti *TermInstance) {
 
 func (tp *TerminalPanel) onExit(ti *TermInstance) {
 	a := tp.app
+	if ti.task != nil && !ti.task.done {
+		tp.finishTask(ti)
+		return
+	}
 	tp.remove(ti)
 	ti.t.Close()
 	if len(tp.terms) == 0 && a.panelView == "terminal" {
@@ -249,6 +262,9 @@ func (tp *TerminalPanel) onExit(ti *TermInstance) {
 
 func (tp *TerminalPanel) killActive() {
 	if cur := tp.current(); cur != nil {
+		if cur.task != nil {
+			cur.task.done = true
+		}
 		cur.t.Close()
 		tp.onExit(cur)
 	}
@@ -546,6 +562,11 @@ func modParam(mod tcell.ModMask) int {
 func (tp *TerminalPanel) sendKey(ev *tcell.EventKey, key string) {
 	cur := tp.current()
 	if cur == nil {
+		return
+	}
+	if cur.task != nil && cur.task.done {
+		// "press any key to close it"
+		tp.onExit(cur)
 		return
 	}
 	t := cur.t
