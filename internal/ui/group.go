@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -508,37 +509,100 @@ func (a *App) drawBreadcrumbs(v *EditorView, r Rect) {
 		}
 		start := x
 		x = a.cv.Text(x, r.Y, r.X+r.W, p, pst)
-		if i < len(parts)-1 && v.buf().Path != "" {
-			dir := filepath.Join(append([]string{a.root}, parts[:i+1]...)...)
-			if !strings.HasPrefix(a.relPath(v.buf().Path), "~") && !filepath.IsAbs(a.relPath(v.buf().Path)) {
-				a.addHit(Rect{start, r.Y, x - start, 1}, func(ev MouseEvent) bool {
-					if ev.Kind == MousePress {
-						a.quickOpenInDir(dir)
-					}
-					return true
-				})
+		if v.buf().Path != "" {
+			// the dropdown lists the folder that contains this segment
+			depth := len(parts) - 1 - i
+			dir := filepath.Dir(v.buf().Path)
+			for k := 0; k < depth; k++ {
+				dir = filepath.Dir(dir)
 			}
+			bx := start
+			a.addHit(Rect{start, r.Y, x - start, 1}, func(ev MouseEvent) bool {
+				if ev.Kind == MousePress {
+					a.breadcrumbFolderMenu(dir, bx, r.Y+1)
+				}
+				return true
+			})
 		}
 	}
 	// symbol path
 	syms := a.outline.symbolPath(v.doc, v.Cursor())
-	for _, s := range syms {
+	for si, s := range syms {
 		x = a.cv.Text(x, r.Y, r.X+r.W, sep, st)
 		icon, ck := a.kindIcon(s.Kind, true)
 		x = a.cv.Text(x, r.Y, r.X+r.W, icon+" ", styleFB(th.C(ck), th.C("breadcrumb.background")))
 		start := x
 		x = a.cv.Text(x, r.Y, r.X+r.W, s.Name, st)
-		sym := s
+		level := si
+		bx := start
 		a.addHit(Rect{start, r.Y, x - start, 1}, func(ev MouseEvent) bool {
 			if ev.Kind == MousePress {
-				pos := a.lsp.FromLSP(v.buf(), sym.SelectionRange.Start)
-				a.pushNav()
-				v.SetCursor(pos)
-				v.ensurePosVisible(pos, true)
-				a.focusEditor()
+				a.breadcrumbSymbolMenu(v, syms, level, bx, r.Y+1)
 			}
 			return true
 		})
+	}
+}
+
+// breadcrumbFolderMenu lists a folder like VS Code's breadcrumb picker: folders open in place, files open.
+func (a *App) breadcrumbFolderMenu(dir string, x, y int) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	match := a.excludeMatcher()
+	var dirs, files []MenuItem
+	for _, e := range entries {
+		name := e.Name()
+		full := filepath.Join(dir, name)
+		if match(name, e.IsDir()) || name == ".git" {
+			continue
+		}
+		if e.IsDir() {
+			dirs = append(dirs, MenuItem{Label: a.Icon(IcoChevronRight) + " " + name, Run: func() { a.breadcrumbFolderMenu(full, x, y) }})
+			continue
+		}
+		icon, _ := a.FileIcon(name, false, false)
+		if icon == "" {
+			icon = " "
+		}
+		files = append(files, MenuItem{Label: icon + " " + name, Run: func() {
+			a.OpenFile(full, false)
+			a.focusEditor()
+		}})
+	}
+	items := append([]MenuItem{}, dirs...)
+	items = append(items, files...)
+	if parent := filepath.Dir(dir); parent != dir && strings.HasPrefix(dir, a.root+string(filepath.Separator)) {
+		items = append([]MenuItem{{Label: "..", Run: func() { a.breadcrumbFolderMenu(parent, x, y) }}, {Separator: true}}, items...)
+	}
+	if len(items) > 0 {
+		a.openContextMenu(x, y, items)
+	}
+}
+
+// breadcrumbSymbolMenu lists the symbols next to syms[level], like VS Code's breadcrumb outline picker.
+func (a *App) breadcrumbSymbolMenu(v *EditorView, syms []lsp.DocumentSymbol, level, x, y int) {
+	var siblings []lsp.DocumentSymbol
+	if level == 0 {
+		siblings = a.outline.rootSymbols(v.doc)
+	} else {
+		siblings = syms[level-1].Children
+	}
+	var items []MenuItem
+	for _, s := range siblings {
+		sym := s
+		icon, _ := a.kindIcon(s.Kind, true)
+		items = append(items, MenuItem{Label: icon + " " + s.Name, Checked: func() bool { return sym.Name == syms[level].Name }, Run: func() {
+			pos := a.lsp.FromLSP(v.buf(), sym.SelectionRange.Start)
+			a.pushNav()
+			v.SetCursor(pos)
+			v.ensurePosVisible(pos, true)
+			a.focusEditor()
+		}})
+	}
+	if len(items) > 0 {
+		a.openContextMenu(x, y, items)
 	}
 }
 

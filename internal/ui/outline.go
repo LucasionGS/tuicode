@@ -415,3 +415,11 @@ func (o *OutlineView) drawList(r Rect) {
 		})
 	}
 }
+
+// rootSymbols returns the top-level symbols of a document from the last fetch.
+func (o *OutlineView) rootSymbols(d *Document) []lsp.DocumentSymbol {
+	if c := o.cache[d]; c != nil {
+		return c.syms
+	}
+	return nil
+}

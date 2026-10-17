@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+
 	"tuicode/internal/config"
 )
 
@@ -239,4 +241,30 @@ func TestJSONSchemaValidation(t *testing.T) {
 		t.Fatalf("diagnostics: %+v", v.doc.Diags)
 	}
 	h.a.lsp.ShutdownAll()
+}
+
+func TestBreadcrumbPicker(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"go.mod": "module x\n", "src/app/main.go": "package main\n", "src/app/util.go": "package main\n", "src/lib/x.go": "package lib\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "src", "app", "main.go")}})
+	h.flush()
+	for y, row := range h.screen() {
+		if x := strings.Index(row, "app"); x >= 0 && strings.Contains(row, "main.go") && y > 1 {
+			cx := len([]rune(row[:x]))
+			h.a.handleEvent(tcell.NewEventMouse(cx, y, tcell.Button1, 0))
+			h.a.handleEvent(tcell.NewEventMouse(cx, y, tcell.ButtonNone, 0))
+			break
+		}
+	}
+	if h.a.ctxMenu == nil {
+		h.dump()
+		t.Fatal("no breadcrumb picker")
+	}
+	var labels []string
+	for _, it := range h.a.ctxMenu.items {
+		labels = append(labels, it.Label)
+	}
+	joined := strings.Join(labels, "|")
+	if !strings.Contains(joined, "app") || !strings.Contains(joined, "lib") {
+		t.Fatalf("picker: %v", labels)
+	}
 }
