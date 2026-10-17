@@ -15,6 +15,24 @@ import (
 
 //#region Problems
 
+// drawFilter draws the filter box in the panel title row.
+func (p *ProblemsPanel) drawFilter(r Rect) {
+	a := p.app
+	th := a.theme
+	ibg := th.C("input.background")
+	st := styleFB(th.C("input.foreground"), ibg)
+	a.cv.Fill(r, ' ', st)
+	focused := a.focus == FocusPanel && a.panelView == "problems" && p.filterFocused
+	p.filter.Draw(r.X+1, r.Y, r.W-2, st, styleFB(th.C("input.placeholderForeground"), ibg), focused)
+	a.addHit(r, func(ev MouseEvent) bool {
+		if ev.Kind == MousePress {
+			a.setFocus(FocusPanel)
+			p.filterFocused = true
+		}
+		return true
+	})
+}
+
 type problemRow struct {
 	path   string
 	diag   *lsp.Diagnostic
@@ -32,10 +50,64 @@ type ProblemsPanel struct {
 	dirty     bool
 	collapsed map[string]bool
 	rect      Rect
+
+	filter        TextInput
+	filterFocused bool
 }
 
 func newProblemsPanel(a *App) *ProblemsPanel {
-	return &ProblemsPanel{app: a, collapsed: map[string]bool{}, dirty: true}
+	p := &ProblemsPanel{app: a, collapsed: map[string]bool{}, dirty: true}
+	p.filter = newTextInput(a, "Filter (e.g. text, **/*.ts, !**/node_modules/**)")
+	p.filter.OnChange = func() { p.dirty = true }
+	return p
+}
+
+// problemFilter matches rows against VS Code's filter syntax: comma separated text or globs,
+// with a leading ! to exclude.
+type problemFilter struct {
+	include, exclude []string
+}
+
+func parseProblemFilter(s string) problemFilter {
+	var f problemFilter
+	for _, tok := range strings.Split(s, ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		if rest, ok := strings.CutPrefix(tok, "!"); ok {
+			if rest != "" {
+				f.exclude = append(f.exclude, rest)
+			}
+			continue
+		}
+		f.include = append(f.include, tok)
+	}
+	return f
+}
+
+func filterTokenMatches(tok, rel, text string) bool {
+	if strings.ContainsAny(tok, "*/") {
+		return globMatch(tok, rel)
+	}
+	return strings.Contains(strings.ToLower(text), strings.ToLower(tok))
+}
+
+func (f problemFilter) matches(rel, text string) bool {
+	for _, tok := range f.exclude {
+		if filterTokenMatches(tok, rel, text) {
+			return false
+		}
+	}
+	if len(f.include) == 0 {
+		return true
+	}
+	for _, tok := range f.include {
+		if filterTokenMatches(tok, rel, text) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *ProblemsPanel) rebuild() {
@@ -50,11 +122,16 @@ func (p *ProblemsPanel) rebuild() {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	filter := parseProblemFilter(p.filter.Text())
 	for _, path := range paths {
 		var diags []problemRow
+		rel := filepath.ToSlash(a.relPath(path))
 		for _, fd := range all[path] {
 			for i := range fd.Diagnostics {
 				d := fd.Diagnostics[i]
+				if !filter.matches(rel, rel+" "+d.Message+" "+d.Source+" "+d.CodeString()+" "+fd.Server) {
+					continue
+				}
 				diags = append(diags, problemRow{path: path, diag: &d, enc: fd.Encoding, server: fd.Server})
 			}
 		}
@@ -114,6 +191,17 @@ func (p *ProblemsPanel) open(i int, focus bool) {
 }
 
 func (p *ProblemsPanel) handleKey(key string) bool {
+	if key == "ctrl+f" {
+		p.filterFocused = true
+		return true
+	}
+	if p.filterFocused {
+		switch key {
+		case "down", "enter", "escape", "tab":
+			p.filterFocused = false
+			return true
+		}
+	}
 	switch key {
 	case "up":
 		p.selected = max(p.selected-1, 0)
@@ -141,7 +229,11 @@ func (p *ProblemsPanel) draw(r Rect) {
 	}
 	bgc := th.C("panel.background")
 	if len(p.rows) == 0 {
-		a.cv.Text(r.X+2, r.Y, r.X+r.W, "No problems have been detected in the workspace.", styleFB(th.C("foreground"), bgc))
+		msg := "No problems have been detected in the workspace."
+		if p.filter.Text() != "" {
+			msg = "No results found with provided filter criteria."
+		}
+		a.cv.Text(r.X+2, r.Y, r.X+r.W, msg, styleFB(th.C("foreground"), bgc))
 		return
 	}
 	h := r.H

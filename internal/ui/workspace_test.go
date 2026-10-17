@@ -11,6 +11,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"tuicode/internal/config"
+	"tuicode/internal/lsp"
 )
 
 func TestMultiRootWorkspace(t *testing.T) {
@@ -266,5 +267,43 @@ func TestBreadcrumbPicker(t *testing.T) {
 	joined := strings.Join(labels, "|")
 	if !strings.Contains(joined, "app") || !strings.Contains(joined, "lib") {
 		t.Fatalf("picker: %v", labels)
+	}
+}
+
+func TestProblemsFilter(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.go": "x\n", "web/b.ts": "y\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{dir}})
+	d := func(msg string) lsp.Diagnostic {
+		return lsp.Diagnostic{Message: msg, Severity: 1}
+	}
+	h.a.lsp.SetDiagnostics(filepath.Join(dir, "a.go"), "test", []lsp.Diagnostic{d("undefined: foo"), d("unused variable")})
+	h.a.lsp.SetDiagnostics(filepath.Join(dir, "web", "b.ts"), "test", []lsp.Diagnostic{d("Cannot find name 'foo'")})
+	h.a.showPanel("problems")
+	count := func() int {
+		h.flush()
+		n := 0
+		for _, r := range h.a.problems.rows {
+			if r.diag != nil {
+				n++
+			}
+		}
+		return n
+	}
+	if n := count(); n != 3 {
+		t.Fatalf("all: %d", n)
+	}
+	h.a.handleEvent(tcell.NewEventKey(tcell.KeyCtrlF, 0, tcell.ModCtrl))
+	h.typeText("foo")
+	if n := count(); n != 2 {
+		t.Fatalf("text filter: %d", n)
+	}
+	h.a.problems.filter.SetText("foo, !**/*.ts")
+	h.a.problems.dirty = true
+	if n := count(); n != 1 {
+		t.Fatalf("exclude glob: %d", n)
+	}
+	if !h.contains("undefined: foo") || h.contains("Cannot find name") {
+		h.dump()
+		t.Fatal("wrong rows shown")
 	}
 }

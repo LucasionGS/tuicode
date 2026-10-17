@@ -805,6 +805,16 @@ func (a *App) drawPanel() {
 	// actions on the right
 	actions := a.panelActions()
 	ax := r.X + r.W - 1
+	if a.panelView == "problems" {
+		aw := 0
+		for _, act := range actions {
+			aw += StrWidth(act.icon) + 1
+		}
+		fw := min(40, r.X+r.W-1-aw-x-2)
+		if fw >= 12 {
+			a.problems.drawFilter(Rect{r.X + r.W - 1 - aw - fw - 1, hy, fw, 1})
+		}
+	}
 	for i := len(actions) - 1; i >= 0; i-- {
 		act := actions[i]
 		w := StrWidth(act.icon)

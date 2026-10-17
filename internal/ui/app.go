@@ -976,6 +976,9 @@ func (a *App) focusedInput() *TextInput {
 			return a.sidebarInput()
 		}
 	case FocusPanel:
+		if a.panelVisible && a.panelView == "problems" && a.problems.filterFocused {
+			return &a.problems.filter
+		}
 		if a.panelVisible && a.panelView == "terminal" && a.terminals.findOpen {
 			return &a.terminals.findInput
 		}
