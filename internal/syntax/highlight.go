@@ -50,6 +50,27 @@ const (
 	KCount
 )
 
+// bracketable reports whether brackets inside a token of kind k count for bracket pairs.
+func bracketable(k Kind) bool {
+	switch k {
+	case KComment, KString, KStringEscape, KRegex, KCode, KHeading, KLink:
+		return false
+	}
+	return true
+}
+
+func isIdent(rs []rune) bool {
+	if len(rs) == 0 {
+		return false
+	}
+	for i, r := range rs {
+		if !(r == '_' || r == '$' || unicode.IsLetter(r) || i > 0 && unicode.IsDigit(r)) {
+			return false
+		}
+	}
+	return true
+}
+
 // Scopes maps kinds to TextMate scopes used to resolve theme token colors.
 var Scopes = [KCount][]string{
 	KText:           {"source"},
@@ -177,14 +198,19 @@ func (h *Highlighter) Highlight(lines []string) [][]Span {
 			if n == 0 {
 				continue
 			}
-			if !markup && (t.kind == KPunctuation || t.kind == KOperator || t.kind == KText) && strings.ContainsAny(p, "()[]{}") {
-				// bracket pair colorization
+			if !markup && bracketable(t.kind) && strings.ContainsAny(p, "()[]{}") {
+				// bracket pair colorization; lexers sometimes glue brackets to names ("render() {")
 				start := col
-				for _, r := range p {
+				rs := []rune(p)
+				for i, r := range rs {
 					switch r {
 					case '(', '[', '{':
 						if col > start {
-							out[line] = appendSpan(out[line], Span{start, col, t.kind, 0})
+							kind := t.kind
+							if r == '(' && t.kind != KPunctuation && t.kind != KOperator && isIdent(rs[i-(col-start):i]) {
+								kind = KFunction
+							}
+							out[line] = appendSpan(out[line], Span{start, col, kind, 0})
 						}
 						out[line] = append(out[line], Span{col, col + 1, KBracket, int8(depth % 3)})
 						depth++

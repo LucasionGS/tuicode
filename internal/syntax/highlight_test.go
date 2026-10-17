@@ -41,3 +41,26 @@ func (s *Server) Start(port int) error {
 		}
 	}
 }
+
+func TestBracketsInsideNameTokens(t *testing.T) {
+	// chroma's TSX lexer returns "render() {" as one name token
+	src := "class Button extends React.Component<Props> {\n  render() {\n    return (\n      <button {...props}>\n      </button>\n    )\n  }\n}\n"
+	h := NewHighlighter(ByID("typescriptreact"), "Button.tsx")
+	spans := h.Highlight(strings.Split(src, "\n"))
+	for line, ss := range spans {
+		for _, sp := range ss {
+			if sp.Kind == KInvalid {
+				t.Fatalf("unexpected bracket on line %d col %d", line+1, sp.Start)
+			}
+		}
+	}
+	found := false
+	for _, sp := range spans[1] {
+		if sp.Kind == KFunction && sp.Start == 2 && sp.End == 8 {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("render not colored as a function: %+v", spans[1])
+	}
+}
