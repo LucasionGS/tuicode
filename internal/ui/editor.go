@@ -124,6 +124,7 @@ func (v *EditorView) buf() *buffer.Buffer { return v.doc.Buf }
 // onChange keeps selections and folds of this view aligned with edits made elsewhere.
 func (v *EditorView) onChange(ch buffer.Change) {
 	v.wrapCache = nil
+	v.app.transformAutoClosed(v, ch)
 	if !v.applying {
 		for i := range v.sels {
 			v.sels[i].Anchor = buffer.TransformPos(v.sels[i].Anchor, ch.Old, ch.NewEnd, false)

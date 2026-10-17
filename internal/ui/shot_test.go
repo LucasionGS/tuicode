@@ -146,3 +146,19 @@ func TestScreenshotPages(t *testing.T) {
 	h.settle()
 	h.snapshot(filepath.Join(out, "light.json"))
 }
+
+func TestScreenshotFile(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	file := os.Getenv("TUI_FILE")
+	if out == "" || file == "" {
+		t.Skip("set TUI_SHOT and TUI_FILE")
+	}
+	t.Setenv("HOME", t.TempDir())
+	h := newHarness(t, 150, 42, Options{Paths: []string{file}})
+	h.settle()
+	if cmd := os.Getenv("TUI_CMD"); cmd != "" {
+		h.a.RunCommand(cmd, nil)
+		h.settle()
+	}
+	h.snapshot(filepath.Join(out, "file.json"))
+}

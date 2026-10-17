@@ -215,3 +215,36 @@ func TestTerminalCtrlC(t *testing.T) {
 	h.dump()
 	t.Fatal("ctrl+c did not reach the shell")
 }
+
+func TestAutoClose(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.ts": "\n"})
+	h := newHarness(t, 120, 40, Options{Paths: []string{filepath.Join(dir, "a.ts")}})
+	h.typeText("foo(a, [1, 2]);")
+	if got := h.text(); got != "foo(a, [1, 2]);\n" {
+		t.Fatalf("overtype: %q", got)
+	}
+	h.key(tcell.KeyEnter, 0, 0)
+	h.typeText(`const s = "x";`)
+	if got := h.text(); got != "foo(a, [1, 2]);\nconst s = \"x\";\n" {
+		t.Fatalf("quotes: %q", got)
+	}
+	h.key(tcell.KeyEnter, 0, 0)
+	h.typeText("don't")
+	if got := h.text(); !strings.HasSuffix(got, "don't\n") {
+		t.Fatalf("apostrophe in word: %q", got)
+	}
+	// backspace inside an empty pair removes both characters
+	h.key(tcell.KeyEnter, 0, 0)
+	h.typeText("(")
+	h.key(tcell.KeyBackspace2, 0, 0)
+	if got := h.text(); !strings.HasSuffix(got, "don't\n\n") {
+		t.Fatalf("pair delete: %q", got)
+	}
+	// typing a bracket around a selection wraps it
+	h.typeText("word")
+	h.key(tcell.KeyLeft, 0, tcell.ModCtrl|tcell.ModShift)
+	h.typeText("(")
+	if got := h.text(); !strings.HasSuffix(got, "(word)\n") {
+		t.Fatalf("surround: %q", got)
+	}
+}

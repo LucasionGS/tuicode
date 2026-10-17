@@ -1295,14 +1295,17 @@ func (a *App) isAutoClosed(v *EditorView, p buffer.Pos) bool {
 
 func (a *App) transformAutoClosed(v *EditorView, ch buffer.Change) {
 	list := a.autoClosed[v]
+	if len(list) == 0 {
+		return
+	}
 	out := list[:0]
 	for _, p := range list {
-		if p.Line != ch.Old.Start.Line && p.Line != ch.Old.End.Line && ch.Old.Start.Line == ch.Old.End.Line && ch.NewEnd.Line == ch.Old.Start.Line {
-			out = append(out, p)
+		// edits that remove the closing character drop it from the list
+		if !p.Less(ch.Old.Start) && p.Less(ch.Old.End) {
 			continue
 		}
 		np := buffer.TransformPos(p, ch.Old, ch.NewEnd, true)
-		if np.Line == p.Line {
+		if np.Line == p.Line || ch.Old.Start.Line != p.Line {
 			out = append(out, np)
 		}
 	}
