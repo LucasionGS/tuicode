@@ -55,8 +55,8 @@ func (v *EditorView) autoCloseTag(ch rune) {
 				return
 			}
 			name := v.unclosedTag(buffer.Pos{Line: p.Line, Col: p.Col - 2})
-			if name == "" {
-				return
+			if name == "" || strings.HasPrefix(string(line[p.Col:]), "</"+name+">") {
+				return // the tag was already closed when its start tag was typed
 			}
 			insert = name
 			if p.Col >= len(line) || line[p.Col] != '>' {

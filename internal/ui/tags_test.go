@@ -30,6 +30,13 @@ func TestAutoCloseTag(t *testing.T) {
 		t.Fatalf("close on </: %q", got)
 	}
 
+	v.buf().ApplyEdits([]buffer.Edit{{Range: buffer.Range{Start: buffer.Pos{Line: 1, Col: 16}, End: buffer.Pos{Line: 1, Col: 23}}, Text: "\n"}}, nil, "")
+	v.SetCursor(buffer.Pos{Line: 2})
+	h.typeText("<li>a</")
+	if got := v.buf().LineString(2); got != "<li>a</</li>" {
+		t.Fatalf("no duplicate close: %q", got)
+	}
+
 	h.a.OpenFile(filepath.Join(dir, "app.tsx"), false)
 	h.typeText("const a = useState<number>(0); const b = <Foo.Bar x={() => 1}>")
 	if got := h.text(); got != "const a = useState<number>(0); const b = <Foo.Bar x={() => 1}></Foo.Bar>\n" {
