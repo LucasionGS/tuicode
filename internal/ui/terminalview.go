@@ -983,7 +983,19 @@ func (tp *TerminalPanel) drawList(r Rect) {
 				}
 			}
 			x := a.cv.Text(r.X+1, y, r.X+r.W, prefix, st)
-			x = a.cv.Text(x, y, r.X+r.W, a.Icon(IcoTerminal)+" ", st)
+			icon, iconSt := a.Icon(IcoTerminal), st
+			if ti.task != nil {
+				// task terminals show their state, like VS Code's task icons
+				switch {
+				case !ti.task.done:
+					icon, iconSt = "⟳", st.Foreground(th.OverColor("terminal.ansiYellow", rbg))
+				case ti.t.ExitCode() == 0:
+					icon, iconSt = a.Icon(IcoCheck), st.Foreground(th.OverColor("testing.iconPassed", rbg))
+				default:
+					icon, iconSt = a.Icon(IcoError), st.Foreground(th.OverColor("testing.iconFailed", rbg))
+				}
+			}
+			x = a.cv.Text(x, y, r.X+r.W, icon+" ", iconSt)
 			a.cv.TextEllipsis(x, y, r.X+r.W-x-2, ti.displayName(), st)
 			hover := a.mouseY == y && r.Contains(a.mouseX, a.mouseY)
 			if hover || sel {
