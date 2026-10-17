@@ -312,9 +312,17 @@ func (p *ProblemsPanel) draw(r Rect) {
 					row := p.rows[rowIdx]
 					if row.diag != nil {
 						msg := row.diag.Message
+						idx := rowIdx
 						a.openContextMenu(ev.X, ev.Y, []MenuItem{
 							{Label: "Copy", Run: func() { a.setClipboard(msg) }},
 							{Label: "Copy Message", Run: func() { a.setClipboard(msg) }},
+							{Separator: true},
+							{Label: "Quick Fix...", Key: "Ctrl+.", Run: func() {
+								p.open(idx, true)
+								if v := a.ActiveView(); v != nil {
+									a.showCodeActions(v, "")
+								}
+							}},
 						})
 					}
 					return true
