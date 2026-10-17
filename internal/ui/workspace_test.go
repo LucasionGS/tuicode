@@ -83,7 +83,7 @@ func TestMultiRootWorkspace(t *testing.T) {
 
 func TestMultiRootTasks(t *testing.T) {
 	dir := tempWorkspace(t, map[string]string{
-		"p.code-workspace":   `{"folders": [{"name": "Client", "path": "client"}, {"name": "Server", "path": "server"}]}`,
+		"p.code-workspace":    `{"folders": [{"name": "Client", "path": "client"}, {"name": "Server", "path": "server"}]}`,
 		"client/package.json": `{"scripts": {"dev": "vite"}}`,
 		"server/deno.json":    `{"tasks": {"dev": "deno run -A main.ts"}}`,
 	})
