@@ -66,7 +66,7 @@ func (v *EditorView) testLenses(line int) []*codeLens {
 		return nil
 	}
 	a := v.app
-	if v.doc.testKind == "deno" {
+	if v.doc.testKind == "deno" || v.doc.testKind == "vitest" {
 		// the Deno extension's lens
 		return []*codeLens{{line: line, command: &lsp.Command{Title: "▶ Run Test"}, run: func() { a.runTests([]*testCase{a.testAt(v.doc, line)}) }}}
 	}

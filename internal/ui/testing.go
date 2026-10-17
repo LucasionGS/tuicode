@@ -119,6 +119,12 @@ func testKind(path string, text func() string) string {
 		if strings.Contains(text(), "Deno.test") {
 			return "deno"
 		}
+		base := filepath.Base(path)
+		if strings.Contains(base, ".test.") || strings.Contains(base, ".spec.") {
+			if _, ok := usesVitest(path); ok {
+				return "vitest"
+			}
+		}
 	}
 	return ""
 }
@@ -129,6 +135,8 @@ func testsInSource(kind string, lines []string) map[int]string {
 		return goTestsIn(lines)
 	case "deno":
 		return denoTestsIn(lines)
+	case "vitest":
+		return vitestTestsIn(lines)
 	}
 	return nil
 }
@@ -364,8 +372,12 @@ func (a *App) runTests(cases []*testCase) {
 			names = append(names, regexp.QuoteMeta(t.name))
 		}
 		filter := "^(" + strings.Join(names, "|") + ")$"
-		if byDir[dir][0].kind == "deno" {
+		switch byDir[dir][0].kind {
+		case "deno":
 			a.runDenoTests(dir, filter, byDir[dir], func() { runNext(i + 1) })
+			return
+		case "vitest":
+			a.runVitest(dir, filter, byDir[dir], func() { runNext(i + 1) })
 			return
 		}
 		args := []string{"test", "-json", "-run", filter, "."}
@@ -988,6 +1000,185 @@ func (a *App) denoResult(file, name string, status testStatus, message string) {
 		}
 	}
 	a.testing.rebuild()
+}
+
+//#endregion
+
+//#region Vitest
+
+var vitestCallRe = regexp.MustCompile(`^(\s*)(describe|suite|it|test)((?:\.(?:only|skip|todo|concurrent|sequential|fails))*)\(\s*(["'` + "`" + `])`)
+
+// vitestTestsIn finds it()/test() calls, naming them like Vitest does: "describe test".
+func vitestTestsIn(lines []string) map[int]string {
+	type scope struct {
+		indent int
+		name   string
+	}
+	var stack []scope
+	out := map[int]string{}
+	for i, l := range lines {
+		m := vitestCallRe.FindStringSubmatchIndex(l)
+		if m == nil {
+			continue
+		}
+		indent := m[3] - m[2]
+		kind := l[m[4]:m[5]]
+		quote := l[m[8]]
+		rest := l[m[9]:]
+		end := -1
+		for j := 0; j < len(rest); j++ {
+			if rest[j] == '\\' {
+				j++
+				continue
+			}
+			if rest[j] == quote {
+				end = j
+				break
+			}
+		}
+		if end < 0 {
+			continue
+		}
+		name := rest[:end]
+		for len(stack) > 0 && stack[len(stack)-1].indent >= indent {
+			stack = stack[:len(stack)-1]
+		}
+		if kind == "describe" || kind == "suite" {
+			stack = append(stack, scope{indent, name})
+			continue
+		}
+		var parts []string
+		for _, s := range stack {
+			parts = append(parts, s.name)
+		}
+		out[i] = strings.Join(append(parts, name), " ")
+	}
+	return out
+}
+
+// usesVitest reports whether the nearest package.json above file depends on vitest.
+func usesVitest(file string) (root string, ok bool) {
+	for d := filepath.Dir(file); filepath.Dir(d) != d; d = filepath.Dir(d) {
+		data, err := os.ReadFile(filepath.Join(d, "package.json"))
+		if err != nil {
+			continue
+		}
+		return d, strings.Contains(string(data), `"vitest"`)
+	}
+	return "", false
+}
+
+// runVitest runs the tests of one file with Vitest's JSON reporter.
+func (a *App) runVitest(file, filter string, cases []*testCase, done func()) {
+	tv := a.testing
+	root, _ := usesVitest(file)
+	bin := filepath.Join(root, "node_modules", ".bin", "vitest")
+	args := []string{"run"}
+	if !fileExists(bin) {
+		bin, args = "npx", []string{"vitest", "run"}
+	}
+	outFile := filepath.Join(os.TempDir(), fmt.Sprintf("tuicode-vitest-%d.json", time.Now().UnixNano()))
+	args = append(args, "--reporter=json", "--outputFile="+outFile, file, "-t", filter)
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "NO_COLOR=1", "FORCE_COLOR=0")
+	out, err := cmd.StdoutPipe()
+	cmd.Stderr = cmd.Stdout
+	if err == nil {
+		err = cmd.Start()
+	}
+	if err != nil {
+		a.notify(NotifyError, "Failed to run vitest: "+err.Error())
+		tv.running = nil
+		return
+	}
+	tv.running = cmd
+	for _, t := range cases {
+		t.status = testRunning
+	}
+	go func() {
+		sc := bufio.NewScanner(out)
+		for sc.Scan() {
+			line := stripANSI(sc.Text())
+			a.Post(func() { a.output.append("Test Results", line) })
+		}
+		_ = cmd.Wait()
+		var report struct {
+			TestResults []struct {
+				AssertionResults []struct {
+					FullName        string   `json:"fullName"`
+					Status          string   `json:"status"`
+					FailureMessages []string `json:"failureMessages"`
+				} `json:"assertionResults"`
+			} `json:"testResults"`
+		}
+		data, _ := os.ReadFile(outFile)
+		_ = os.Remove(outFile)
+		_ = json.Unmarshal(data, &report)
+		a.Post(func() {
+			for _, fr := range report.TestResults {
+				for _, r := range fr.AssertionResults {
+					status := testSkipped
+					switch r.Status {
+					case "passed":
+						status = testPassed
+					case "failed":
+						status = testFailed
+					}
+					msg := ""
+					if len(r.FailureMessages) > 0 {
+						msg = stripANSI(r.FailureMessages[0])
+					}
+					a.stackResult(file, r.FullName, status, msg)
+				}
+			}
+			for _, t := range cases {
+				if t.status == testQueued || t.status == testRunning {
+					t.status = testFailed
+				}
+			}
+			tv.rebuild()
+			done()
+		})
+	}()
+}
+
+var stackLocRe = regexp.MustCompile(`(?:file://)?(/[^\s:()]+):(\d+):(\d+)`)
+
+// stackResult records a result whose failure message holds a JS stack trace pointing at the test file.
+func (a *App) stackResult(file, name string, status testStatus, message string) {
+	t := a.testing.tests[file+"\x00"+name]
+	if t == nil {
+		return
+	}
+	t.status = status
+	if message == "" {
+		return
+	}
+	t.output = append(t.output, strings.Split(message, "\n")...)
+	line := t.line
+	for _, m := range stackLocRe.FindAllStringSubmatch(message, -1) {
+		if m[1] == file {
+			n, _ := strconv.Atoi(m[2])
+			line = n - 1
+			break
+		}
+	}
+	if a.lsp != nil {
+		first, _, _ := strings.Cut(message, "\n")
+		existing := []lsp.Diagnostic{}
+		for _, fd := range a.lsp.Diagnostics(file) {
+			if fd.Server == "test" {
+				existing = fd.Diagnostics
+			}
+		}
+		a.lsp.SetDiagnostics(file, "test", append(existing, lsp.Diagnostic{
+			Range:    lsp.Range{Start: lsp.Position{Line: line}, End: lsp.Position{Line: line, Character: 1 << 20}},
+			Severity: lsp.SeverityError,
+			Source:   "test",
+			Message:  name + ": " + first,
+		}))
+	}
 }
 
 //#endregion

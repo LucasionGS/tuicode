@@ -121,3 +121,38 @@ func TestDenoTesting(t *testing.T) {
 		t.Fatalf("diagnostics: %+v", v.doc.Diags)
 	}
 }
+
+// TestVitest needs TUI_VITEST_DIR: a project with vitest installed and the sum.test.ts below.
+func TestVitest(t *testing.T) {
+	dir := os.Getenv("TUI_VITEST_DIR")
+	if dir == "" {
+		t.Skip("set TUI_VITEST_DIR")
+	}
+	tempWorkspace(t, nil)
+	setSandbox("")
+	file := filepath.Join(dir, "sum.test.ts")
+	h := newHarness(t, 140, 40, Options{Paths: []string{file}})
+	v := h.a.ActiveView()
+	tests := v.doc.testsInDoc()
+	if tests[3] != "math adds" || tests[6] != "math breaks" || tests[11] != "top level" {
+		t.Fatalf("discovered: %v", tests)
+	}
+	h.a.RunCommand("testing.runCurrentFile", nil)
+	adds, breaks, top := h.a.testAt(v.doc, 3), h.a.testAt(v.doc, 6), h.a.testAt(v.doc, 11)
+	for i := 0; i < 1500 && (h.a.testing.running != nil || adds.status < testPassed); i++ {
+		time.Sleep(20 * time.Millisecond)
+		h.flush()
+	}
+	if adds.status != testPassed || breaks.status != testFailed || top.status != testPassed {
+		t.Fatalf("statuses: %d %d %d", adds.status, breaks.status, top.status)
+	}
+	found := false
+	for _, d := range v.doc.Diags {
+		if d.Range.Start.Line == 7 && strings.Contains(d.Message, "expected 2 to be 3") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics: %+v", v.doc.Diags)
+	}
+}
