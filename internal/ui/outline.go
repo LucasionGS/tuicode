@@ -138,7 +138,59 @@ var symbolPatterns = []struct {
 	{regexp.MustCompile(`^(#{1,6})\s+(.+)$`), 15},
 }
 
+// markdownSymbols nests headings by level, skipping fenced code blocks.
+func markdownSymbols(d *Document) []lsp.DocumentSymbol {
+	b := d.Buf
+	fences := d.markdownFences()
+	type open struct {
+		level int
+		sym   *lsp.DocumentSymbol
+	}
+	var roots []*lsp.DocumentSymbol
+	var stack []open
+	closeTo := func(level, line int) {
+		for len(stack) > 0 && stack[len(stack)-1].level >= level {
+			top := stack[len(stack)-1]
+			top.sym.Range.End = lsp.Position{Line: max(line-1, top.sym.Range.Start.Line)}
+			stack = stack[:len(stack)-1]
+		}
+	}
+	limit := min(b.LineCount(), 50000)
+	for l := 0; l < limit; l++ {
+		if fences[l] {
+			continue
+		}
+		line := b.LineString(l)
+		m := mdHeadingRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		level := len(m[1])
+		closeTo(level, l)
+		name := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(line[len(m[1]):]), "#"))
+		r := lsp.Range{Start: lsp.Position{Line: l}, End: lsp.Position{Line: l, Character: len([]rune(line))}}
+		sym := &lsp.DocumentSymbol{Name: name, Kind: 15, Range: r, SelectionRange: r}
+		if len(stack) > 0 {
+			parent := stack[len(stack)-1].sym
+			parent.Children = append(parent.Children, *sym)
+			sym = &parent.Children[len(parent.Children)-1]
+		} else {
+			roots = append(roots, sym)
+		}
+		stack = append(stack, open{level, sym})
+	}
+	closeTo(0, limit)
+	out := make([]lsp.DocumentSymbol, len(roots))
+	for i, r := range roots {
+		out[i] = *r
+	}
+	return out
+}
+
 func regexSymbols(d *Document) []lsp.DocumentSymbol {
+	if d.Lang.ID == "markdown" {
+		return markdownSymbols(d)
+	}
 	var out []lsp.DocumentSymbol
 	b := d.Buf
 	limit := min(b.LineCount(), 50000)

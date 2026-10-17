@@ -222,4 +222,8 @@ func TestMarkdownFolding(t *testing.T) {
 	if _, ok := v.foldRangeAt(7); ok {
 		t.Error("a comment in a code block folded like a heading")
 	}
+	syms := markdownSymbols(v.doc)
+	if len(syms) != 1 || syms[0].Name != "Title" || len(syms[0].Children) != 2 || syms[0].Children[1].Name != "Usage" || syms[0].Children[0].Range.End.Line != 10 {
+		t.Fatalf("outline: %+v", syms)
+	}
 }
