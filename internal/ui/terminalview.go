@@ -115,6 +115,9 @@ func (tp *TerminalPanel) rebuildFlat() {
 
 func (tp *TerminalPanel) start(dir string) *TermInstance {
 	shell, args := tp.shell()
+	if newArgs, env, ok := tp.app.shellIntegrationArgs(shell, args); ok {
+		return tp.startProc(dir, shell, newArgs, func(ti *TermInstance) { ti.t.AddEnv(env...) })
+	}
 	return tp.startProc(dir, shell, args)
 }
 
@@ -789,6 +792,7 @@ func (tp *TerminalPanel) draw(r Rect) {
 		}
 		focused := a.focus == FocusPanel && a.panelView == "terminal" && i == g.active && !tp.findOpen
 		tp.drawTerm(ti, tr, focused, i == g.active)
+		tp.drawDecorations(ti, tr)
 		idx := i
 		a.addHit(tr, func(ev MouseEvent) bool {
 			g.active = idx

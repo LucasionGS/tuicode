@@ -53,6 +53,16 @@ func Prepare(shell string, args []string, dir string, env []string, cols, rows i
 	return t
 }
 
+// AddEnv adds environment variables to a prepared terminal.
+func (t *Terminal) AddEnv(kv ...string) {
+	t.cmd.Env = append(t.cmd.Env, kv...)
+}
+
+// SetArgs replaces the arguments of a prepared terminal's program.
+func (t *Terminal) SetArgs(args ...string) {
+	t.cmd.Args = append([]string{t.cmd.Args[0]}, args...)
+}
+
 // Run starts a prepared terminal's process.
 func (t *Terminal) Run() error {
 	cols, rows := t.Emulator.Size()

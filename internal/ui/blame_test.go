@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"tuicode/internal/buffer"
+	"tuicode/internal/term"
 )
 
 func TestGitBlame(t *testing.T) {
@@ -107,3 +108,48 @@ func TestStageHunk(t *testing.T) {
 }
 
 func bpos(line, col int) buffer.Pos { return buffer.Pos{Line: line, Col: col} }
+
+func TestShellIntegration(t *testing.T) {
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not installed")
+	}
+	dir := tempWorkspace(t, map[string]string{"a.txt": "a\n"})
+	t.Setenv("SHELL", bash)
+	h := newHarness(t, 120, 30, Options{Paths: []string{dir}})
+	h.a.showPanel("terminal")
+	ti := h.a.terminals.current()
+	waitFor := func(what string, cond func() bool) {
+		for i := 0; i < 300 && !cond(); i++ {
+			time.Sleep(10 * time.Millisecond)
+			h.flush()
+		}
+		if !cond() {
+			h.dump()
+			t.Fatalf("timeout waiting for %s", what)
+		}
+	}
+	marks := func() []term.MarkRef {
+		ti.t.Lock()
+		defer ti.t.Unlock()
+		return ti.t.Marks()
+	}
+	waitFor("first prompt", func() bool { return len(marks()) == 1 })
+	ti.t.WriteInput([]byte("echo hi; false\r"))
+	waitFor("command end", func() bool { ms := marks(); return len(ms) == 2 && ms[0].Mark.Finished })
+	m := marks()[0].Mark
+	if m.Command != "echo hi; false" || m.ExitCode != 1 {
+		t.Fatalf("mark: %+v", m)
+	}
+	row := marks()[0].Row
+	ti.t.Lock()
+	out := ti.t.CommandOutput(row)
+	ti.t.Unlock()
+	if out != "hi" {
+		t.Fatalf("output: %q", out)
+	}
+	if cmds := h.a.recentTerminalCommands(); len(cmds) == 0 || cmds[0] != "echo hi; false" {
+		t.Fatalf("recent: %v", cmds)
+	}
+	h.a.terminals.closeAll()
+}

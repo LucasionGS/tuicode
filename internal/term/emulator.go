@@ -65,6 +65,8 @@ type Cell struct {
 type Line struct {
 	Cells   []Cell
 	Wrapped bool
+	Mark    *CommandMark // set on the line where a shell prompt started
+	Output  *CommandMark // set on the line where that command's output started
 }
 
 type cursorState struct {
@@ -118,6 +120,10 @@ type Emulator struct {
 
 	Title string
 	Cwd   string
+
+	// ShellIntegration is set once the shell reports prompts with OSC 633 or 133.
+	ShellIntegration bool
+	curMark          *CommandMark
 
 	// parser
 	state    int
@@ -381,7 +387,7 @@ func clamp(v, lo, hi int) int {
 
 func (e *Emulator) pushScrollback(ls ...Line) {
 	for _, l := range ls {
-		cp := Line{Cells: append([]Cell{}, l.Cells...), Wrapped: l.Wrapped}
+		cp := Line{Cells: append([]Cell{}, l.Cells...), Wrapped: l.Wrapped, Mark: l.Mark, Output: l.Output}
 		e.scrollback = append(e.scrollback, cp)
 	}
 	if over := len(e.scrollback) - e.MaxScrollback; over > 0 {
@@ -1309,6 +1315,8 @@ func (e *Emulator) osc(s string) {
 				e.Cwd = rest[j:]
 			}
 		}
+	case "133", "633":
+		e.shellMark(arg)
 	case "10", "11":
 		if arg == "?" {
 			c := e.DefaultFG
