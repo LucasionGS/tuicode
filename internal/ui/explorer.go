@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -51,6 +52,8 @@ type Explorer struct {
 	collapsedRoot bool
 	outlineOpen   bool
 	dirty         bool
+	multi         map[string]bool // extra selected paths (Ctrl/Shift+click)
+	anchor        int             // row where a Shift selection starts
 }
 
 type exEdit struct {
@@ -453,6 +456,21 @@ func (e *Explorer) handleKey(key, text string, isText bool) bool {
 	}
 	n := e.current()
 	switch key {
+	case "shift+up", "shift+down":
+		if len(e.multi) == 0 {
+			e.anchor = e.selected
+		}
+		if key == "shift+up" {
+			e.selectRange(max(e.selected-1, 0))
+		} else {
+			e.selectRange(min(e.selected+1, len(e.rows)-1))
+		}
+		e.ensureVisible()
+		return true
+	case "up", "down", "home", "end", "pageup", "pagedown", "left", "right", "escape":
+		e.multi = nil
+	}
+	switch key {
 	case "up":
 		if e.selected > 0 {
 			e.selected--
@@ -500,16 +518,12 @@ func (e *Explorer) handleKey(key, text string, isText bool) bool {
 		e.deleteSelected(false)
 	case "shift+delete":
 		e.deleteSelected(true)
-	case "ctrl+c":
-		if n != nil {
-			e.clipboard = []string{n.path}
-			e.cutMode = false
+	case "ctrl+c", "ctrl+x":
+		e.clipboard = nil
+		for _, sn := range e.selectedNodes() {
+			e.clipboard = append(e.clipboard, sn.path)
 		}
-	case "ctrl+x":
-		if n != nil {
-			e.clipboard = []string{n.path}
-			e.cutMode = true
-		}
+		e.cutMode = key == "ctrl+x"
 	case "ctrl+v":
 		e.paste()
 	case "escape":
@@ -684,47 +698,65 @@ func (a *App) onFileRenamed(from, to string) {
 
 func (e *Explorer) deleteSelected(permanent bool) {
 	a := e.app
-	n := e.current()
-	if n == nil {
+	nodes := e.selectedNodes()
+	for i := len(nodes) - 1; i >= 0; i-- {
+		if nodes[i].isRoot || nodes[i] == e.root {
+			nodes = append(nodes[:i], nodes[i+1:]...)
+		}
+	}
+	if len(nodes) == 0 {
 		return
 	}
+	n := nodes[0]
 	trash := !permanent && hasTrash()
 	what := "file"
 	if n.isDir {
 		what = "folder"
 	}
-	msg := "Are you sure you want to delete '" + n.name + "'?"
+	name := "'" + n.name + "'"
 	detail := "You can restore this " + what + " from the Trash."
+	if len(nodes) > 1 {
+		name = fmt.Sprintf("the following %d files/folders", len(nodes))
+		var names []string
+		for _, x := range nodes {
+			names = append(names, x.name)
+		}
+		detail = strings.Join(names, "\n") + "\n\nYou can restore these files from the Trash."
+	}
+	msg := "Are you sure you want to delete " + name + "?"
 	btn := "Move to Trash"
 	if !trash {
-		msg = "Are you sure you want to permanently delete '" + n.name + "'?"
+		msg = "Are you sure you want to permanently delete " + name + "?"
 		detail = "This action is irreversible!"
 		btn = "Delete"
 	}
 	doDelete := func() {
-		var err error
-		if trash {
-			err = moveToTrash(n.path)
-		} else {
-			err = fsRemoveAll(n.path)
-		}
-		if err != nil {
-			a.notify(NotifyError, "Failed to delete '"+n.name+"': "+err.Error())
-		}
-		// close editors of deleted files
-		for p, d := range a.docs {
-			if p == n.path || strings.HasPrefix(p, n.path+string(filepath.Separator)) {
-				if !d.Buf.Dirty() {
-					for _, g := range a.groups {
-						for i := len(g.tabs) - 1; i >= 0; i-- {
-							if g.tabs[i].special == nil && g.tabs[i].doc == d {
-								a.closeTabNow(g, i)
+		for _, n := range nodes {
+			var err error
+			if trash {
+				err = moveToTrash(n.path)
+			} else {
+				err = fsRemoveAll(n.path)
+			}
+			if err != nil {
+				a.notify(NotifyError, "Failed to delete '"+n.name+"': "+err.Error())
+			}
+			// close editors of deleted files
+			for p, d := range a.docs {
+				if p == n.path || strings.HasPrefix(p, n.path+string(filepath.Separator)) {
+					if !d.Buf.Dirty() {
+						for _, g := range a.groups {
+							for i := len(g.tabs) - 1; i >= 0; i-- {
+								if g.tabs[i].special == nil && g.tabs[i].doc == d {
+									a.closeTabNow(g, i)
+								}
 							}
 						}
 					}
 				}
 			}
 		}
+		e.multi = nil
 		e.refresh()
 		a.refreshGit()
 	}
@@ -959,7 +991,7 @@ func (e *Explorer) draw(r Rect) {
 			break
 		}
 		row := e.rows[idx]
-		sel := idx == e.selected
+		sel := idx == e.selected || row.node != nil && e.multi[row.node.path]
 		rbg := bgc
 		rfg := th.C("sideBar.foreground")
 		if sel && focused {
@@ -1060,7 +1092,26 @@ func (e *Explorer) draw(r Rect) {
 			switch ev.Kind {
 			case MousePress:
 				a.setFocus(FocusSidebar)
-				e.selected = rowIdx
+				if ev.Button == tcell.Button1 && ev.Mods&tcell.ModCtrl != 0 {
+					// Ctrl+click toggles a row in the selection
+					if e.multi == nil {
+						e.multi = map[string]bool{}
+					}
+					if cur := e.current(); cur != nil {
+						e.multi[cur.path] = true
+					}
+					e.multi[node.path] = !e.multi[node.path]
+					e.selected, e.anchor = rowIdx, rowIdx
+					return true
+				}
+				if ev.Button == tcell.Button1 && ev.Mods&tcell.ModShift != 0 {
+					e.selectRange(rowIdx)
+					return true
+				}
+				if ev.Button != tcell.Button2 || !e.multi[node.path] {
+					e.multi = nil
+				}
+				e.selected, e.anchor = rowIdx, rowIdx
 				switch ev.Button {
 				case tcell.Button2:
 					e.contextMenu(node, ev.X, ev.Y)
@@ -1160,22 +1211,40 @@ func (e *Explorer) dropAt(src *exNode, x, y int) {
 	if !target.isDir {
 		dir = filepath.Dir(target.path)
 	}
-	if dir == filepath.Dir(src.path) || strings.HasPrefix(dir+string(filepath.Separator), src.path+string(filepath.Separator)) {
+	srcs := []*exNode{src}
+	if e.multi[src.path] {
+		srcs = e.selectedNodes()
+	}
+	var moves []*exNode
+	for _, n := range srcs {
+		if dir == filepath.Dir(n.path) || strings.HasPrefix(dir+string(filepath.Separator), n.path+string(filepath.Separator)) || n.isRoot {
+			continue
+		}
+		moves = append(moves, n)
+	}
+	if len(moves) == 0 {
 		return
 	}
-	dst := filepath.Join(dir, src.name)
 	move := func() {
-		a.movePath(src.path, dst, func(err error) {
-			if err != nil {
-				a.notify(NotifyError, "Failed to move: "+err.Error())
-				return
-			}
-			e.refresh()
-			e.reveal(dst, false)
-		})
+		for _, n := range moves {
+			dst := filepath.Join(dir, n.name)
+			a.movePath(n.path, dst, func(err error) {
+				if err != nil {
+					a.notify(NotifyError, "Failed to move: "+err.Error())
+					return
+				}
+				e.refresh()
+				e.reveal(dst, false)
+			})
+		}
+		e.multi = nil
 	}
 	if a.settings.Bool("explorer.confirmDragAndDrop", "") {
-		a.showDialog("Are you sure you want to move '"+src.name+"' into '"+filepath.Base(dir)+"'?", "", []string{"Move", "Cancel"}, func(c int) {
+		msg := "Are you sure you want to move '" + moves[0].name + "' into '" + filepath.Base(dir) + "'?"
+		if len(moves) > 1 {
+			msg = fmt.Sprintf("Are you sure you want to move the following %d files into '%s'?", len(moves), filepath.Base(dir))
+		}
+		a.showDialog(msg, "", []string{"Move", "Cancel"}, func(c int) {
 			if c == 0 {
 				move()
 			}
@@ -1183,6 +1252,30 @@ func (e *Explorer) dropAt(src *exNode, x, y int) {
 		return
 	}
 	move()
+}
+
+// selectedNodes returns the focused node plus the multi-selection, in tree order.
+func (e *Explorer) selectedNodes() []*exNode {
+	cur := e.current()
+	var out []*exNode
+	for _, r := range e.rows {
+		if r.node != nil && (e.multi[r.node.path] || r.node == cur) {
+			out = append(out, r.node)
+		}
+	}
+	return out
+}
+
+// selectRange selects the rows between the anchor and i.
+func (e *Explorer) selectRange(i int) {
+	e.multi = map[string]bool{}
+	from, to := min(e.anchor, i), max(e.anchor, i)
+	for k := from; k <= to && k < len(e.rows); k++ {
+		if k >= 0 && e.rows[k].node != nil {
+			e.multi[e.rows[k].node.path] = true
+		}
+	}
+	e.selected = i
 }
 
 func (e *Explorer) contextMenu(n *exNode, x, y int) {
@@ -1216,8 +1309,8 @@ func (e *Explorer) contextMenu(n *exNode, x, y int) {
 			a.findInFiles(false)
 		}},
 		MenuItem{Separator: true},
-		MenuItem{Label: "Cut", Key: "Ctrl+X", Run: func() { e.clipboard = []string{n.path}; e.cutMode = true }},
-		MenuItem{Label: "Copy", Key: "Ctrl+C", Run: func() { e.clipboard = []string{n.path}; e.cutMode = false }},
+		MenuItem{Label: "Cut", Key: "Ctrl+X", Run: func() { e.handleKey("ctrl+x", "", false) }},
+		MenuItem{Label: "Copy", Key: "Ctrl+C", Run: func() { e.handleKey("ctrl+c", "", false) }},
 		MenuItem{Label: "Paste", Key: "Ctrl+V", Disabled: len(e.clipboard) == 0, Run: func() { e.paste() }},
 		MenuItem{Separator: true},
 		MenuItem{Label: "Copy Path", Key: "Ctrl+Alt+C", Run: func() { a.setClipboard(n.path) }},

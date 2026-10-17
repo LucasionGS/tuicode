@@ -185,3 +185,37 @@ func TestMoreCommands(t *testing.T) {
 		t.Fatalf("saved workspace: %+v %v", ws, err)
 	}
 }
+
+func TestExplorerMultiSelect(t *testing.T) {
+	dir := tempWorkspace(t, map[string]string{"a.txt": "a", "b.txt": "b", "c.txt": "c", "sub/keep.txt": "k"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{dir}})
+	e := h.a.explorer
+	h.a.showSidebar("explorer")
+	h.flush()
+	row := func(name string) int {
+		for i, r := range e.rows {
+			if r.node != nil && r.node.name == name {
+				return i
+			}
+		}
+		t.Fatalf("no row %s", name)
+		return -1
+	}
+	e.selected = row("a.txt")
+	h.a.sidebarHandleKey("shift+down", "", false)
+	h.a.sidebarHandleKey("shift+down", "", false)
+	if got := len(e.selectedNodes()); got != 3 {
+		t.Fatalf("selected %d", got)
+	}
+	// cut all three and paste into the folder
+	h.a.sidebarHandleKey("ctrl+x", "", false)
+	e.selected = row("sub")
+	e.multi = nil
+	h.a.sidebarHandleKey("ctrl+v", "", false)
+	h.flush()
+	for _, n := range []string{"a.txt", "b.txt", "c.txt"} {
+		if !fileExists(filepath.Join(dir, "sub", n)) {
+			t.Fatalf("%s not moved", n)
+		}
+	}
+}
