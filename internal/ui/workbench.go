@@ -266,7 +266,6 @@ var activityItems = []activityItem{
 	{"search", IcoSearch, "Search (Ctrl+Shift+F)", "workbench.view.search"},
 	{"scm", IcoSCM, "Source Control (Ctrl+Shift+G)", "workbench.view.scm"},
 	{"debug", IcoDebug, "Run and Debug (Ctrl+Shift+D)", "workbench.view.debug"},
-	{"outline", IcoOutline, "Outline", "outline.focus"},
 	{"extensions", IcoExtensions, "Language Servers (Ctrl+Shift+X)", "workbench.view.extensions"},
 }
 

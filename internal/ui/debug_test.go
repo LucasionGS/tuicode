@@ -68,3 +68,39 @@ func TestDebugGo(t *testing.T) {
 	h.key(tcell.KeyF5, 0, tcell.ModShift)
 	wait(func() bool { return h.a.debug.state == "terminated" }, "stop")
 }
+
+func TestDebugGDB(t *testing.T) {
+	if _, err := exec.LookPath("gdb"); err != nil {
+		t.Skip("gdb not installed")
+	}
+	cc, err := exec.LookPath("gcc")
+	if err != nil {
+		t.Skip("gcc not installed")
+	}
+	src := "#include <stdio.h>\n\nint main(void) {\n\tint x = 41;\n\tx++;\n\tprintf(\"%d\\n\", x);\n\treturn 0;\n}\n"
+	launch := `{"version": "0.2.0", "configurations": [{"name": "C", "type": "cppdbg", "request": "launch", "program": "${workspaceFolder}/a.out", "cwd": "${workspaceFolder}"}]}`
+	dir := tempWorkspace(t, map[string]string{"main.c": src, ".vscode/launch.json": launch})
+	if out, err := exec.Command(cc, "-g", "-O0", "-o", filepath.Join(dir, "a.out"), filepath.Join(dir, "main.c")).CombinedOutput(); err != nil {
+		t.Fatalf("compile: %v %s", err, out)
+	}
+	t.Setenv("SHELL", "/bin/sh")
+	setSandbox("")
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "main.c")}})
+	v := h.a.ActiveView()
+	h.a.toggleBreakpoint(v.buf().Path, 4) // x++
+	h.key(tcell.KeyF5, 0, 0)
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+		if h.a.debug != nil && h.a.debug.state == "stopped" && len(h.a.debug.frames) > 0 && h.contains("x: 41") {
+			h.key(tcell.KeyF5, 0, tcell.ModShift)
+			return
+		}
+	}
+	h.dump()
+	for _, l := range h.a.debugConsole {
+		t.Log(l.text)
+	}
+	t.Fatal("gdb session did not stop at the breakpoint")
+}
