@@ -25,6 +25,7 @@ type citem struct {
 	resolved  bool
 	docs      string
 	emmet     bool
+	rng       *buffer.Range // explicit replace range for built-in providers
 }
 
 // Completion is the suggest widget state for an editor.
@@ -105,6 +106,9 @@ func (a *App) afterType(v *EditorView, text string) {
 	}
 	ch := rs[0]
 	v.autoCloseTag(ch)
+	if a.settingsJSONAfterType(v, ch) {
+		return
+	}
 	isTrigger := false
 	for _, t := range a.triggerChars(v) {
 		if t == text {
@@ -250,6 +254,14 @@ func (a *App) triggerCompletion(v *EditorView, explicit bool, triggerChar string
 	c.triggerChar = triggerChar
 	c.selected = 0
 	c.scroll = 0
+	if items, start, ok := a.settingsCompletions(v); ok {
+		c.start = start
+		c.items = items
+		c.loading = false
+		c.gen++
+		a.refilterCompletion(v)
+		return
+	}
 	words := a.wordCompletions(v, c.start)
 	snips := a.snippetCompletions(v.lang())
 	words = append(snips, words...)
@@ -648,6 +660,14 @@ func (c *Completion) accept() {
 		}
 		isSnippet = it.item.InsertTextFormat == 2
 		additional = it.item.AdditionalTextEdits
+	}
+	if it.rng != nil && it.rng.Start.Line == cur.Line {
+		replace = *it.rng
+		// the range was computed when suggestions opened; recompute it for the text typed since
+		if fresh, _, ok := a.settingsCompletions(v); ok && len(fresh) > 0 {
+			replace = *fresh[0].rng
+		}
+		replace.End.Col = max(replace.End.Col, cur.Col)
 	}
 	if it.emmet {
 		_, start := v.emmetAbbreviationBefore()
