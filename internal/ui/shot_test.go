@@ -162,3 +162,57 @@ func TestScreenshotFile(t *testing.T) {
 	}
 	h.snapshot(filepath.Join(out, "file.json"))
 }
+
+func TestScreenshotIntelliSense(t *testing.T) {
+	out := os.Getenv("TUI_SHOT")
+	if out == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_SHOT and TUI_LSP")
+	}
+	src := "package main\n\nimport (\n\t\"fmt\"\n\t\"strings\"\n)\n\nfunc main() {\n\tname := \"world\"\n\tfmt.Println(strings.ToUpper(name))\n\t\n}\n"
+	dir := tempWorkspace(t, map[string]string{"go.mod": "module demo\n\ngo 1.21\n", "main.go": src})
+	t.Setenv("GOCACHE", filepath.Join(os.Getenv("REAL_HOME"), ".cache", "go-build"))
+	t.Setenv("GOPATH", filepath.Join(os.Getenv("REAL_HOME"), "go"))
+	t.Setenv("GOMODCACHE", filepath.Join(os.Getenv("REAL_HOME"), "go", "pkg", "mod"))
+	setSandbox("")
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "main.go")}})
+	v := h.a.ActiveView()
+	for i := 0; i < 80 && h.a.lsp.Client(v.buf()) == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	time.Sleep(time.Second)
+	h.settle()
+	// completion with documentation
+	v.SetCursor(buffer.Pos{Line: 10, Col: 1})
+	h.typeText("strings.Rep")
+	for i := 0; i < 40 && (v.completion == nil || len(v.completion.filtered) == 0); i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	time.Sleep(500 * time.Millisecond)
+	h.settle()
+	h.snapshot(filepath.Join(out, "completion.json"))
+	h.key(tcell.KeyEsc, 0, 0)
+	// mouse hover over Println
+	x, y := h.find("Println")
+	h.a.handleEvent(tcell.NewEventMouse(x+2, y, tcell.ButtonNone, 0))
+	for i := 0; i < 30 && v.hover == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.settle()
+	h.snapshot(filepath.Join(out, "hover.json"))
+	// signature help
+	h.key(tcell.KeyEsc, 0, 0)
+	v.SetCursor(buffer.Pos{Line: 10, Col: v.buf().LineLen(10)})
+	h.typeText("eat")
+	v.closeWidgets(false)
+	h.typeText("(")
+	for i := 0; i < 30 && v.sig == nil; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	h.settle()
+	h.snapshot(filepath.Join(out, "signature.json"))
+	h.a.lsp.ShutdownAll()
+}

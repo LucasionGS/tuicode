@@ -45,6 +45,7 @@ type Completion struct {
 	client      *lsp.Client
 	triggerChar string
 	resolveID   int
+	gen         int
 }
 
 func (c *Completion) visible() bool {
@@ -251,8 +252,11 @@ func (a *App) triggerCompletion(v *EditorView, explicit bool, triggerChar string
 		}
 		c.loading = true
 		version := v.buf().Version()
+		c.gen++
+		gen := c.gen
 		id, ok := a.lsp.Request(v.buf(), "textDocument/completion", params, func(raw json.RawMessage, err error) {
-			if v.completion != c || !c.active {
+			// responses to superseded (or cancelled) requests are ignored
+			if v.completion != c || !c.active || c.gen != gen {
 				return
 			}
 			c.loading = false
@@ -387,7 +391,6 @@ func (a *App) refilterCompletion(v *EditorView) {
 	if c.incomplete && prefix != "" && c.reqID == 0 && !c.loading {
 		// server asked to be re-queried as the word grows
 		c.loading = true
-		go func() {}()
 		a.requeryIncomplete(v)
 	}
 	c.filtered = c.filtered[:0]
@@ -461,8 +464,10 @@ func (a *App) requeryIncomplete(v *EditorView) {
 	cur := v.Cursor()
 	params := a.lsp.DocParams(v.buf(), cur)
 	params["context"] = map[string]any{"triggerKind": 3}
+	c.gen++
+	gen := c.gen
 	id, ok := a.lsp.Request(v.buf(), "textDocument/completion", params, func(raw json.RawMessage, err error) {
-		if v.completion != c || !c.active {
+		if v.completion != c || !c.active || c.gen != gen {
 			return
 		}
 		c.loading = false
