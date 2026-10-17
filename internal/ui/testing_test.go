@@ -59,3 +59,28 @@ func TestGoTesting(t *testing.T) {
 		h.snapshot(filepath.Join(out, "testing.json"))
 	}
 }
+
+func TestDebugGoTest(t *testing.T) {
+	if _, err := exec.LookPath("dlv"); err != nil {
+		t.Skip("dlv not installed")
+	}
+	src := "package calc\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) {\n\tx := 41\n\tx++\n\tif x != 42 {\n\t\tt.Fatal(x)\n\t}\n}\n"
+	dir := tempWorkspace(t, map[string]string{"go.mod": "module calc\n\ngo 1.21\n", "calc_test.go": src})
+	t.Setenv("GOCACHE", filepath.Join(os.Getenv("REAL_HOME"), ".cache", "go-build"))
+	t.Setenv("GOPATH", filepath.Join(os.Getenv("REAL_HOME"), "go"))
+	t.Setenv("SHELL", "/bin/cat")
+	setSandbox("")
+	h := newHarness(t, 140, 40, Options{Paths: []string{filepath.Join(dir, "calc_test.go")}})
+	v := h.a.ActiveView()
+	h.a.toggleBreakpoint(v.buf().Path, 6) // x++
+	h.a.debugTest(h.a.testAt(v.doc, 4))
+	for i := 0; i < 600 && !(h.a.debug != nil && h.a.debug.state == "stopped" && len(h.a.debug.frames) > 0); i++ {
+		time.Sleep(50 * time.Millisecond)
+		h.flush()
+	}
+	if h.a.debug == nil || h.a.debug.state != "stopped" || h.a.debug.frames[h.a.debug.frameIdx].Line != 7 {
+		h.dump()
+		t.Fatal("did not stop in the test")
+	}
+	h.a.debug.stop()
+}
