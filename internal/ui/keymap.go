@@ -200,6 +200,7 @@ var defaultKeymap = [][3]string{
 	{"ctrl+shift+f12", "editor.action.peekImplementation", "editorTextFocus"},
 	{"ctrl+k ctrl+/", "editor.foldAllBlockComments", "editorTextFocus"},
 	{"ctrl+k ctrl+b", "editor.action.setSelectionAnchor", "editorTextFocus"},
+	{"ctrl+k ctrl+alt+s", "git.stageSelectedRanges", "editorTextFocus"},
 	{"ctrl+k ctrl+k", "editor.action.selectFromAnchorToCursor", "editorTextFocus"},
 	{"ctrl+k ctrl+p", "workbench.action.showAllEditors", ""},
 	{"ctrl+k shift+enter", "workbench.action.pinEditor", "!activeEditorIsPinned"},

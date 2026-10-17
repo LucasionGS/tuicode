@@ -325,6 +325,8 @@ func firstLine(s string) string {
 func (a *App) registerGitCommands() {
 	a.cmd("git.commit", "Git", "Commit", func(any) { a.gitCommit(false) })
 	a.alias("git.commitStaged", "git.commit")
+	a.cmd("git.stageSelectedRanges", "Git", "Stage Selected Ranges", a.ed(func(v *EditorView) { v.stageHunks(v.hunksInSelections()) }))
+	a.cmd("git.revertSelectedRanges", "Git", "Revert Selected Ranges", a.ed(func(v *EditorView) { v.revertHunks(v.hunksInSelections()) }))
 	conflictCmd := func(which string) func(any) {
 		return a.ed(func(v *EditorView) {
 			if c, ok := v.doc.conflictAt(v.Cursor().Line); ok {

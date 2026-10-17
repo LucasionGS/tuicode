@@ -35,10 +35,11 @@ type Document struct {
 	hlRunning bool
 	hlQueued  bool
 
-	gitBase    []string
-	hasGitBase bool
-	gitChanges map[int]int
-	gitVersion int
+	gitBase     []string
+	gitBaseCRLF bool
+	hasGitBase  bool
+	gitChanges  map[int]int
+	gitVersion  int
 
 	Diags []Diag
 
@@ -264,7 +265,8 @@ func (a *App) loadGitBase(d *Document) {
 	}
 	root := a.gitRoot
 	go func() {
-		content, err := git.Show(root, "HEAD", rel)
+		// like VS Code, changes are shown against the index so staged hunks disappear
+		content, err := git.Show(root, "", rel)
 		a.Post(func() {
 			if err != nil {
 				// untracked or new file: everything is added only when tracked status says so
@@ -276,6 +278,7 @@ func (a *App) loadGitBase(d *Document) {
 				}
 			} else {
 				d.hasGitBase = true
+				d.gitBaseCRLF = strings.Contains(content, "\r\n")
 				content = strings.ReplaceAll(content, "\r\n", "\n")
 				d.gitBase = strings.Split(content, "\n")
 			}

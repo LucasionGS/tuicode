@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"tuicode/internal/buffer"
@@ -64,9 +65,24 @@ func (p *DirtyDiffPeek) move(d int) {
 // revert restores the original lines of the hunk.
 func (p *DirtyDiffPeek) revert() {
 	v := p.v
+	v.buf().CloseUndoGroup()
+	v.applyEdits([]buffer.Edit{v.revertEdit(p.hunk)}, "", func(res []buffer.Range) []buffer.Selection {
+		return []buffer.Selection{buffer.Caret(res[0].Start)}
+	})
+	v.dirtyDiff = nil
+}
+
+// stage writes the hunk to the index.
+func (p *DirtyDiffPeek) stage() {
+	p.v.stageHunks([]git.Hunk{p.hunk})
+	p.v.dirtyDiff = nil
+}
+
+// revertEdit returns the edit that restores a hunk's original lines.
+func (v *EditorView) revertEdit(h git.Hunk) buffer.Edit {
 	b := v.buf()
-	h := p.hunk
-	text := strings.Join(p.removed, "\n")
+	removed := v.doc.gitBase[h.AStart : h.AStart+h.ALen]
+	text := strings.Join(removed, "\n")
 	var r buffer.Range
 	switch {
 	case h.BLen == 0:
@@ -94,11 +110,76 @@ func (p *DirtyDiffPeek) revert() {
 		last := h.BStart + h.BLen - 1
 		r = buffer.Range{Start: buffer.Pos{Line: h.BStart}, End: buffer.Pos{Line: last, Col: b.LineLen(last)}}
 	}
-	b.CloseUndoGroup()
-	v.applyEdits([]buffer.Edit{{Range: r, Text: text}}, "", func(res []buffer.Range) []buffer.Selection {
-		return []buffer.Selection{buffer.Caret(res[0].Start)}
-	})
-	v.dirtyDiff = nil
+	return buffer.Edit{Range: r, Text: text}
+}
+
+// hunksInSelections returns the changes that touch a selected line.
+func (v *EditorView) hunksInSelections() []git.Hunk {
+	var out []git.Hunk
+	for _, h := range v.hunks() {
+		from, to := h.BStart, h.BStart+max(h.BLen, 1)-1
+		for _, s := range v.sels {
+			r := s.Range()
+			if r.Start.Line <= to && r.End.Line >= from {
+				out = append(out, h)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// revertHunks restores the original text of several changes at once.
+func (v *EditorView) revertHunks(hs []git.Hunk) {
+	if len(hs) == 0 {
+		return
+	}
+	edits := make([]buffer.Edit, len(hs))
+	for i, h := range hs {
+		edits[i] = v.revertEdit(h)
+	}
+	v.buf().CloseUndoGroup()
+	v.applyEdits(edits, "", nil)
+}
+
+// stageHunks stages changes of the editor's file without staging the rest of it.
+func (v *EditorView) stageHunks(hs []git.Hunk) {
+	a := v.app
+	d := v.doc
+	if len(hs) == 0 || !d.hasGitBase || a.gitRoot == "" {
+		return
+	}
+	lines := append([]string{}, d.gitBase...)
+	// apply bottom-up so earlier hunk offsets stay valid
+	for i := len(hs) - 1; i >= 0; i-- {
+		h := hs[i]
+		added := make([]string, h.BLen)
+		for k := range added {
+			added[k] = v.buf().LineString(h.BStart + k)
+		}
+		lines = append(lines[:h.AStart], append(added, lines[h.AStart+h.ALen:]...)...)
+	}
+	sep := "\n"
+	if d.gitBaseCRLF {
+		sep = "\r\n"
+	}
+	content := strings.Join(lines, sep)
+	root := a.gitRoot
+	rel, err := filepath.Rel(root, v.buf().Path)
+	if err != nil {
+		return
+	}
+	go func() {
+		err := git.StageContent(root, rel, content)
+		a.Post(func() {
+			if err != nil {
+				a.notify(NotifyError, "Failed to stage changes: "+firstLine(err.Error()))
+				return
+			}
+			a.loadGitBase(d)
+			a.refreshGit()
+		})
+	}()
 }
 
 func (p *DirtyDiffPeek) draw() {
@@ -138,6 +219,7 @@ func (p *DirtyDiffPeek) draw() {
 		run   func()
 	}
 	btns := []btn{
+		{a.Icon(IcoAdd) + " Stage", p.stage},
 		{a.Icon(IcoDiscard) + " Revert", p.revert},
 		{a.Icon(IcoArrowUp), func() { p.move(-1) }},
 		{a.Icon(IcoArrowDown), func() { p.move(1) }},

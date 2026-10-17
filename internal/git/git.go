@@ -84,6 +84,47 @@ func Run(dir string, args ...string) (string, error) {
 	return out.String(), nil
 }
 
+// RunInput is Run with input on stdin.
+func RunInput(dir, input string, args ...string) (string, error) {
+	if Guard != nil {
+		if err := Guard(dir); err != nil {
+			return "", err
+		}
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
+	cmd.Stdin = strings.NewReader(input)
+	var out, errb bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return out.String(), errors.New(msg)
+	}
+	return out.String(), nil
+}
+
+// StageContent writes content as the staged (index) version of rel, keeping its file mode.
+func StageContent(root, rel, content string) error {
+	rel = filepath.ToSlash(rel)
+	mode := "100644"
+	if out, err := Run(root, "ls-files", "-s", "--", rel); err == nil {
+		if f := strings.Fields(out); len(f) > 0 {
+			mode = f[0]
+		}
+	}
+	hash, err := RunInput(root, content, "hash-object", "-w", "--stdin", "--path", rel)
+	if err != nil {
+		return err
+	}
+	_, err = Run(root, "update-index", "--add", "--cacheinfo", mode+","+strings.TrimSpace(hash)+","+rel)
+	return err
+}
+
 // Available reports whether git is installed.
 func Available() bool {
 	_, err := exec.LookPath("git")
