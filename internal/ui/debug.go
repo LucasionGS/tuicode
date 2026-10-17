@@ -1378,7 +1378,7 @@ func (tp *TerminalPanel) startCommand(title string, args []string, cwd string, e
 		title = filepath.Base(args[0])
 	}
 	ti := &TermInstance{t: t, name: title, custom: true, id: tp.nextID}
-	t.OnOutput = func() { a.Post(func() {}) }
+	t.OnOutput = tp.notifyOutput
 	t.OnExit = func() { a.Post(func() {}) }
 	tp.groups = append(tp.groups, &TermGroup{terms: []*TermInstance{ti}})
 	tp.active = len(tp.groups) - 1

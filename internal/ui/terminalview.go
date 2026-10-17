@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -48,6 +49,9 @@ type TerminalPanel struct {
 	nextID int
 	terms  []*TermInstance // flat list for quick checks
 	rect   Rect
+
+	// outputPending coalesces redraw requests from busy terminals
+	outputPending atomic.Bool
 
 	findOpen    bool
 	findInput   TextInput
@@ -142,11 +146,18 @@ func (tp *TerminalPanel) start(dir string) *TermInstance {
 	bg := a.theme.RGBA("terminal.background")
 	t.DefaultFG = [3]uint8{fg.R, fg.G, fg.B}
 	t.DefaultBG = [3]uint8{bg.R, bg.G, bg.B}
-	t.OnOutput = func() { a.Post(func() {}) }
+	t.OnOutput = tp.notifyOutput
 	t.OnExit = func() { a.Post(func() { tp.onExit(ti) }) }
 	t.Bell = func() {}
 	t.OnTitle = func(title string) {}
 	return ti
+}
+
+// notifyOutput wakes the UI once per batch of terminal output.
+func (tp *TerminalPanel) notifyOutput() {
+	if tp.outputPending.CompareAndSwap(false, true) {
+		tp.app.Post(func() { tp.outputPending.Store(false) })
+	}
 }
 
 func (tp *TerminalPanel) newTerminal(dir string) {

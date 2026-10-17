@@ -2,6 +2,7 @@ package ui
 
 import (
 	"os"
+	"runtime"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,4 +50,34 @@ func TestPerfLargeFile(t *testing.T) {
 	hl := h.a.ActiveView().doc.hl
 	hl.Highlight(h.a.ActiveView().buf().Lines())
 	t.Logf("highlight all: %v", time.Since(start))
+}
+
+func TestPerfTerminalFlood(t *testing.T) {
+	if os.Getenv("TUI_PERF") == "" {
+		t.Skip("set TUI_PERF=1")
+	}
+	dir := tempWorkspace(t, map[string]string{"a.txt": "x\n"})
+	t.Setenv("SHELL", "/bin/sh")
+	h := newHarness(t, 160, 50, Options{Paths: []string{dir}})
+	h.ctrl('`')
+	h.typeText("seq 1 300000; echo DONE-$((1+1))")
+	h.key(tcell.KeyEnter, 0, 0)
+	start := time.Now()
+	frames := 0
+	for time.Since(start) < 30*time.Second {
+		select {
+		case fn := <-h.a.postCh:
+			fn()
+		case <-time.After(5 * time.Millisecond):
+		}
+		h.a.draw()
+		frames++
+		if h.contains("DONE-2") {
+			break
+		}
+	}
+	t.Logf("flood finished in %v with %d frames, %d goroutines", time.Since(start), frames, runtime.NumGoroutine())
+	if !h.contains("DONE-2") {
+		t.Fatal("flood did not finish")
+	}
 }
