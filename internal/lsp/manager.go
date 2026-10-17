@@ -134,6 +134,39 @@ func (m *Manager) fileExists(name string) bool {
 
 // ServerCommand picks the server command for a language, or nil.
 func (m *Manager) ServerCommand(lang *syntax.Language) []string {
+	return m.ServerCommandFor(lang, "")
+}
+
+// isDenoFile reports whether a file belongs to a Deno project: a deno.json above it (up to the
+// workspace root), or "deno.enable" in the settings, like the Deno extension decides.
+func (m *Manager) isDenoFile(path string) bool {
+	if cfg, ok := m.config("deno").(map[string]any); ok {
+		if on, ok := cfg["enable"].(bool); ok {
+			return on
+		}
+	}
+	if m.fileExists("deno.json") || m.fileExists("deno.jsonc") {
+		return true
+	}
+	if path == "" {
+		return false
+	}
+	for d := filepath.Dir(path); len(d) > len(m.Root) && strings.HasPrefix(d, m.Root); d = filepath.Dir(d) {
+		for _, f := range []string{"deno.json", "deno.jsonc"} {
+			if _, err := os.Stat(filepath.Join(d, f)); err == nil {
+				return true
+			}
+		}
+		// a package.json closer to the file means a Node project
+		if _, err := os.Stat(filepath.Join(d, "package.json")); err == nil {
+			return false
+		}
+	}
+	return false
+}
+
+// ServerCommandFor picks the server for a file of a language.
+func (m *Manager) ServerCommandFor(lang *syntax.Language, path string) []string {
 	if lang == nil {
 		return nil
 	}
@@ -146,7 +179,7 @@ func (m *Manager) ServerCommand(lang *syntax.Language) []string {
 		}
 		return nil
 	}
-	isDeno := m.fileExists("deno.json") || m.fileExists("deno.jsonc")
+	isDeno := m.isDenoFile(path)
 	for _, cand := range lang.Servers {
 		if cand[0] == "deno" && !isDeno {
 			continue
@@ -452,7 +485,7 @@ func (m *Manager) Open(buf *buffer.Buffer) {
 		return
 	}
 	lang := syntax.ByID(buf.LanguageID)
-	cmd := m.ServerCommand(lang)
+	cmd := m.ServerCommandFor(lang, buf.Path)
 	if cmd == nil {
 		if _, overridden := m.Overrides[lang.ID]; len(lang.Servers) > 0 && !overridden && m.OnMissing != nil {
 			if m.missingNotified == nil {
