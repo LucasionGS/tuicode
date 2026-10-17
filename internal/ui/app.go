@@ -1303,7 +1303,14 @@ func (a *App) setupLSP() {
 	}
 	m.Configuration = func(section string) any {
 		if section == "" {
-			return map[string]any{}
+			// the sections VS Code's language clients synchronize with workspace/didChangeConfiguration
+			all := map[string]any{}
+			for _, sec := range []string{"json", "css", "scss", "less", "html", "javascript", "typescript", "http", "emmet"} {
+				if v := a.settings.Section(sec); v != nil {
+					all[sec] = v
+				}
+			}
+			return all
 		}
 		return a.settings.Section(section)
 	}

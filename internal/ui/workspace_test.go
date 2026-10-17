@@ -219,3 +219,24 @@ func TestExplorerMultiSelect(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONSchemaValidation(t *testing.T) {
+	if os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_LSP")
+	}
+	if _, err := exec.LookPath("vscode-json-language-server"); err != nil {
+		t.Skip("vscode-json-language-server not installed")
+	}
+	// the schema comes from schemastore.org, like in VS Code
+	dir := tempWorkspace(t, map[string]string{"package.json": "{\n  \"name\": \"x\",\n  \"version\": \"1.0.0\",\n  \"keywords\": \"abc\"\n}\n"})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "package.json")}})
+	v := h.a.ActiveView()
+	for i := 0; i < 150 && len(v.doc.Diags) == 0; i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	if len(v.doc.Diags) != 1 || !strings.Contains(v.doc.Diags[0].Message, "array") {
+		t.Fatalf("diagnostics: %+v", v.doc.Diags)
+	}
+	h.a.lsp.ShutdownAll()
+}

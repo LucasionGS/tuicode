@@ -177,11 +177,63 @@ func (m *Manager) initOptions(cmd []string) any {
 	case "deno":
 		return map[string]any{"enable": true, "lint": true, "unstable": true}
 	case "vscode-json-language-server", "vscode-json-languageserver":
-		return map[string]any{"provideFormatter": true}
+		// the server downloads http schemas itself (VS Code fetches them on its behalf)
+		return map[string]any{"provideFormatter": true, "handledSchemaProtocols": []string{"file", "http", "https"}}
 	case "vscode-css-language-server", "vscode-html-language-server":
 		return map[string]any{"provideFormatter": true}
 	}
 	return nil
+}
+
+// providerKeys maps dynamically registered methods to their server capability names.
+var providerKeys = map[string]string{
+	"textDocument/formatting":         "documentFormattingProvider",
+	"textDocument/rangeFormatting":    "documentRangeFormattingProvider",
+	"textDocument/onTypeFormatting":   "documentOnTypeFormattingProvider",
+	"textDocument/documentColor":      "colorProvider",
+	"textDocument/semanticTokens":     "semanticTokensProvider",
+	"textDocument/linkedEditingRange": "linkedEditingRangeProvider",
+}
+
+// register records a capability a server registered after initialization.
+func (m *Manager) register(c *Client, method string, opts map[string]any) {
+	m.log(c.Name, "Registered "+method)
+	key, ok := providerKeys[method]
+	if !ok {
+		name, found := strings.CutPrefix(method, "textDocument/")
+		if !found {
+			return
+		}
+		key = name + "Provider"
+	}
+	var val any = true
+	if opts != nil {
+		val = opts
+	}
+	if c.Capabilities == nil {
+		c.Capabilities = map[string]any{}
+	}
+	c.Capabilities[key] = val
+	if key == "diagnosticProvider" {
+		for _, d := range m.docs {
+			if d.client == c {
+				m.schedulePull(d)
+			}
+		}
+	}
+}
+
+// jsonSchemaAssociations are the schemas VS Code and its built-in extensions associate with common files.
+var jsonSchemaAssociations = []map[string]any{
+	{"fileMatch": []string{"package.json"}, "uri": "https://json.schemastore.org/package.json"},
+	{"fileMatch": []string{"tsconfig.json", "tsconfig.*.json", "tsconfig-*.json"}, "uri": "https://json.schemastore.org/tsconfig.json"},
+	{"fileMatch": []string{"jsconfig.json", "jsconfig.*.json"}, "uri": "https://json.schemastore.org/jsconfig.json"},
+	{"fileMatch": []string{"deno.json", "deno.jsonc"}, "uri": "https://raw.githubusercontent.com/denoland/deno/main/cli/schemas/config-file.v1.json"},
+	{"fileMatch": []string{".eslintrc", ".eslintrc.json"}, "uri": "https://json.schemastore.org/eslintrc.json"},
+	{"fileMatch": []string{".babelrc", ".babelrc.json", "babel.config.json"}, "uri": "https://json.schemastore.org/babelrc.json"},
+	{"fileMatch": []string{".prettierrc", ".prettierrc.json"}, "uri": "https://json.schemastore.org/prettierrc.json"},
+	{"fileMatch": []string{"composer.json"}, "uri": "https://getcomposer.org/schema.json"},
+	{"fileMatch": []string{"bower.json", ".bower.json"}, "uri": "https://json.schemastore.org/bower.json"},
 }
 
 func (m *Manager) log(server, line string) {
@@ -238,6 +290,9 @@ func (m *Manager) clientFor(cmd []string) *Client {
 		m.log(name, fmt.Sprintf("Initialized %s (position encoding %s)", srv, c.PositionEncoding))
 		if cfg := m.config(""); cfg != nil {
 			c.Notify("workspace/didChangeConfiguration", map[string]any{"settings": cfg})
+		}
+		if base := filepath.Base(cmd[0]); base == "vscode-json-language-server" || base == "vscode-json-languageserver" {
+			c.Notify("json/schemaAssociations", []any{jsonSchemaAssociations})
 		}
 		if m.OnStatus != nil {
 			m.OnStatus()
@@ -353,6 +408,19 @@ func (m *Manager) handleRequest(c *Client, method string, params json.RawMessage
 		return nil, nil
 	case "workspace/workspaceFolders":
 		return WorkspaceFolders(m.Root, m.Folders), nil
+	case "client/registerCapability":
+		var p struct {
+			Registrations []struct {
+				Method          string         `json:"method"`
+				RegisterOptions map[string]any `json:"registerOptions"`
+			} `json:"registrations"`
+		}
+		if json.Unmarshal(params, &p) == nil {
+			for _, r := range p.Registrations {
+				m.register(c, r.Method, r.RegisterOptions)
+			}
+		}
+		return nil, nil
 	case "window/showDocument":
 		var p struct {
 			URI       string `json:"uri"`
