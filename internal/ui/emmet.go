@@ -253,7 +253,10 @@ func (a *App) emmetCompletion(v *EditorView) *citem {
 	if v.inStringOrComment(v.Cursor()) {
 		return nil
 	}
-	abbr, _ := v.emmetAbbreviationBefore()
+	abbr, start := v.emmetAbbreviationBefore()
+	if start > 0 && strings.ContainsRune("</", v.buf().Line(v.Cursor().Line)[start-1]) || strings.HasSuffix(abbr, ">") {
+		return nil // already inside a tag
+	}
 	if len(abbr) < 1 || !strings.ContainsAny(abbr, ".#>*+[{") && !knownTag(abbr) {
 		return nil
 	}

@@ -104,6 +104,7 @@ func (a *App) afterType(v *EditorView, text string) {
 		return
 	}
 	ch := rs[0]
+	v.autoCloseTag(ch)
 	isTrigger := false
 	for _, t := range a.triggerChars(v) {
 		if t == text {

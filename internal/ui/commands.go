@@ -281,8 +281,13 @@ func (a *App) registerCommands() {
 	a.hiddenCmd("type.newline", a.edit(func(v *EditorView) { v.Newline() }))
 	a.hiddenCmd("tab", a.edit(func(v *EditorView) { v.Tab() }))
 	a.hiddenCmd("outdent", a.edit(func(v *EditorView) { v.OutdentLines() }))
-	a.hiddenCmd("deleteLeft", a.edit(func(v *EditorView) { v.Backspace(false); a.afterBackspace(v) }))
-	a.hiddenCmd("deleteRight", a.edit(func(v *EditorView) { v.DeleteForward(false) }))
+	a.hiddenCmd("deleteLeft", a.edit(func(v *EditorView) {
+		v.withLinkedEditing("deleteLeft", "", func() { v.Backspace(false) })
+		a.afterBackspace(v)
+	}))
+	a.hiddenCmd("deleteRight", a.edit(func(v *EditorView) {
+		v.withLinkedEditing("deleteRight", "", func() { v.DeleteForward(false) })
+	}))
 	a.hiddenCmd("deleteWordLeft", a.edit(func(v *EditorView) { v.Backspace(true) }))
 	a.hiddenCmd("deleteWordRight", a.edit(func(v *EditorView) { v.DeleteForward(true) }))
 	a.hiddenCmd("deleteAllLeft", a.edit(func(v *EditorView) {
@@ -300,7 +305,7 @@ func (a *App) registerCommands() {
 		if m, ok := args.(map[string]any); ok {
 			if t, ok := m["text"].(string); ok {
 				if v := a.ActiveView(); v != nil && v.special == nil {
-					v.Type(t)
+					v.withLinkedEditing("type", t, func() { v.Type(t) })
 					a.afterType(v, t)
 				}
 			}

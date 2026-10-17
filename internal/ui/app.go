@@ -911,7 +911,7 @@ func (a *App) handleKey(ev *tcell.EventKey) {
 	// plain typing
 	if isText && a.focus == FocusEditor {
 		if v := a.ActiveView(); v != nil {
-			v.Type(text)
+			v.withLinkedEditing("type", text, func() { v.Type(text) })
 			a.afterType(v, text)
 		}
 	}
