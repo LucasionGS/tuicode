@@ -80,6 +80,7 @@ type Manager struct {
 	clients  map[string]*Client
 	failed   map[string]string
 	docs     map[*buffer.Buffer]*document
+	extra    map[*buffer.Buffer][]*document         // secondary servers (linters)
 	diags    map[string]map[string]*FileDiagnostics // path -> server -> diags
 	progress map[string]*Progress
 }
@@ -92,6 +93,7 @@ func NewManager(root string, dispatch func(func())) *Manager {
 		clients:  map[string]*Client{},
 		failed:   map[string]string{},
 		docs:     map[*buffer.Buffer]*document{},
+		extra:    map[*buffer.Buffer][]*document{},
 		diags:    map[string]map[string]*FileDiagnostics{},
 		progress: map[string]*Progress{},
 	}
@@ -248,7 +250,7 @@ func (m *Manager) register(c *Client, method string, opts map[string]any) {
 	}
 	c.Capabilities[key] = val
 	if key == "diagnosticProvider" {
-		for _, d := range m.docs {
+		for _, d := range m.allDocs() {
 			if d.client == c {
 				m.schedulePull(d)
 			}
@@ -303,7 +305,12 @@ func (m *Manager) clientFor(cmd []string) *Client {
 			if d.client == c {
 				d.client = nil
 				d.opened = false
-				_ = b
+			}
+			for _, x := range m.extra[b] {
+				if x.client == c {
+					x.client = nil
+					x.opened = false
+				}
 			}
 		}
 		if m.OnStatus != nil {
@@ -410,15 +417,24 @@ func (m *Manager) handleRequest(c *Client, method string, params json.RawMessage
 	case "workspace/configuration":
 		var p struct {
 			Items []struct {
-				Section string `json:"section"`
+				Section  string `json:"section"`
+				ScopeURI string `json:"scopeUri"`
 			} `json:"items"`
 		}
 		_ = json.Unmarshal(params, &p)
 		out := make([]any, len(p.Items))
 		for i, it := range p.Items {
+			if isESLint(c) {
+				out[i] = m.eslintSettings(it.ScopeURI)
+				continue
+			}
 			out[i] = m.config(it.Section)
 		}
 		return out, nil
+	case "eslint/confirmESLintExecution":
+		return 4, nil // approved
+	case "eslint/probeFailed", "eslint/noLibrary", "eslint/openDoc", "eslint/noConfig":
+		return map[string]any{}, nil
 	case "workspace/applyEdit":
 		var p struct {
 			Edit WorkspaceEdit `json:"edit"`
@@ -432,7 +448,7 @@ func (m *Manager) handleRequest(c *Client, method string, params json.RawMessage
 		}
 		return map[string]any{"applied": ok}, nil
 	case "workspace/diagnostic/refresh":
-		for _, d := range m.docs {
+		for _, d := range m.allDocs() {
 			if d.client == c {
 				d.resultID = ""
 				m.schedulePull(d)
@@ -504,9 +520,46 @@ func (m *Manager) Open(buf *buffer.Buffer) {
 	}
 	d := &document{buf: buf, client: c, uri: PathToURI(buf.Path), langID: lspLanguageID(buf.LanguageID)}
 	m.docs[buf] = d
+	m.sync(d)
+	// linters like ESLint run next to the main server
+	for _, sc := range m.secondaryServers(lang, buf.Path) {
+		if c2 := m.clientFor(sc); c2 != nil {
+			d2 := &document{buf: buf, client: c2, uri: d.uri, langID: d.langID}
+			m.extra[buf] = append(m.extra[buf], d2)
+			m.sync(d2)
+		}
+	}
+}
+
+// allDocs returns every synced document, secondary ones included.
+func (m *Manager) allDocs() []*document {
+	var out []*document
+	for buf, d := range m.docs {
+		out = append(out, d)
+		out = append(out, m.extra[buf]...)
+	}
+	return out
+}
+
+// live reports whether d is still one of the synced documents.
+func (m *Manager) live(d *document) bool {
+	if m.docs[d.buf] == d {
+		return true
+	}
+	for _, x := range m.extra[d.buf] {
+		if x == d {
+			return true
+		}
+	}
+	return false
+}
+
+// sync starts sending a document to its client.
+func (m *Manager) sync(d *document) {
+	buf, c := d.buf, d.client
 	d.listener = buf.AddListener(func(ch buffer.Change) { m.onChange(d, ch) })
 	c.WhenReady(func() {
-		if d.client != c || m.docs[buf] != d {
+		if d.client != c || !m.live(d) {
 			return
 		}
 		d.version++
@@ -542,11 +595,14 @@ func (m *Manager) Close(buf *buffer.Buffer) {
 	if !ok {
 		return
 	}
-	buf.RemoveListener(d.listener)
 	delete(m.docs, buf)
-	if d.client != nil && d.opened {
-		d.client.Notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": d.uri}})
+	for _, x := range append([]*document{d}, m.extra[buf]...) {
+		buf.RemoveListener(x.listener)
+		if x.client != nil && x.opened {
+			x.client.Notify("textDocument/didClose", map[string]any{"textDocument": map[string]any{"uri": x.uri}})
+		}
 	}
+	delete(m.extra, buf)
 }
 
 func (m *Manager) onChange(d *document, ch buffer.Change) {
@@ -590,8 +646,11 @@ func encLen(s string, enc string) int {
 
 // Flush sends pending changes to the servers.
 func (m *Manager) Flush() {
-	for _, d := range m.docs {
+	for buf, d := range m.docs {
 		m.flushDoc(d)
+		for _, x := range m.extra[buf] {
+			m.flushDoc(x)
+		}
 	}
 }
 
@@ -641,7 +700,7 @@ func (m *Manager) dispatch(fn func()) {
 
 // pull requests textDocument/diagnostic for a document.
 func (m *Manager) pull(d *document) {
-	if m.docs[d.buf] != d || d.client == nil || !d.opened {
+	if !m.live(d) || d.client == nil || !d.opened {
 		return
 	}
 	m.flushDoc(d)
@@ -657,7 +716,7 @@ func (m *Manager) pull(d *document) {
 	c := d.client
 	path := d.buf.Path
 	d.client.Call("textDocument/diagnostic", params, func(raw json.RawMessage, err error) {
-		if err != nil || m.docs[d.buf] != d {
+		if err != nil || !m.live(d) {
 			return
 		}
 		var res struct {
@@ -698,6 +757,12 @@ func (m *Manager) Saved(buf *buffer.Buffer) {
 		}
 	}
 	d.client.Notify("textDocument/didSave", params)
+	for _, x := range m.extra[buf] {
+		if x.client != nil && x.opened {
+			m.flushDoc(x)
+			x.client.Notify("textDocument/didSave", map[string]any{"textDocument": map[string]any{"uri": x.uri}})
+		}
+	}
 }
 
 // Client returns the language client for a buffer, if any.
@@ -902,6 +967,30 @@ func (m *Manager) Request(buf *buffer.Buffer, method string, params any, cb func
 		m.flushDoc(d)
 	}
 	return c.Call(method, params, cb), true
+}
+
+// ClientsFor returns the main server of a buffer followed by its secondary servers.
+func (m *Manager) ClientsFor(buf *buffer.Buffer) []*Client {
+	var out []*Client
+	if d, ok := m.docs[buf]; ok && d.client != nil {
+		out = append(out, d.client)
+	}
+	for _, x := range m.extra[buf] {
+		if x.client != nil && x.opened {
+			out = append(out, x.client)
+		}
+	}
+	return out
+}
+
+// RequestTo sends a request about a buffer to one of its servers.
+func (m *Manager) RequestTo(c *Client, buf *buffer.Buffer, method string, params any, cb func(json.RawMessage, error)) int {
+	for _, d := range append([]*document{m.docs[buf]}, m.extra[buf]...) {
+		if d != nil && d.client == c {
+			m.flushDoc(d)
+		}
+	}
+	return c.Call(method, params, cb)
 }
 
 // ParseLocations decodes a definition-style result (Location, []Location or []LocationLink).

@@ -296,6 +296,8 @@ type CodeAction struct {
 	Disabled    *struct {
 		Reason string `json:"reason"`
 	} `json:"disabled,omitempty"`
+	// Client is the server that offered the action (not sent).
+	Client *Client `json:"-"`
 }
 
 // InlayHint is an inline annotation.

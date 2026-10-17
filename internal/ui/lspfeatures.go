@@ -364,16 +364,43 @@ func parseCodeActions(raw json.RawMessage) []lsp.CodeAction {
 	return out
 }
 
+// collectCodeActions asks every server of the editor (linters included) for code actions.
+func (a *App) collectCodeActions(v *EditorView, params map[string]any, done func([]lsp.CodeAction)) {
+	clients := a.lsp.ClientsFor(v.buf())
+	results := make([][]lsp.CodeAction, len(clients))
+	pending := len(clients)
+	if pending == 0 {
+		done(nil)
+		return
+	}
+	for i, c := range clients {
+		idx, cl := i, c
+		a.lsp.RequestTo(cl, v.buf(), "textDocument/codeAction", params, func(raw json.RawMessage, err error) {
+			if err == nil {
+				acts := parseCodeActions(raw)
+				for k := range acts {
+					acts[k].Client = cl
+				}
+				results[idx] = acts
+			}
+			pending--
+			if pending == 0 {
+				var all []lsp.CodeAction
+				for _, r := range results {
+					all = append(all, r...)
+				}
+				sort.SliceStable(all, func(i, j int) bool { return all[i].IsPreferred && !all[j].IsPreferred })
+				done(all)
+			}
+		})
+	}
+}
+
 func (a *App) showCodeActions(v *EditorView, only string) {
 	if a.noLSP(v, "code action") {
 		return
 	}
-	a.lsp.Request(v.buf(), "textDocument/codeAction", a.codeActionParams(v, only), func(raw json.RawMessage, err error) {
-		if err != nil {
-			a.setStatusMessage("Code actions failed: " + err.Error())
-			return
-		}
-		acts := parseCodeActions(raw)
+	a.collectCodeActions(v, a.codeActionParams(v, only), func(acts []lsp.CodeAction) {
 		if len(acts) == 0 {
 			a.setStatusMessage("No code actions available")
 			return
@@ -386,8 +413,7 @@ func (a *App) runCodeActionKind(v *EditorView, kind string) {
 	if a.noLSP(v, "code action") {
 		return
 	}
-	a.lsp.Request(v.buf(), "textDocument/codeAction", a.codeActionParams(v, kind), func(raw json.RawMessage, err error) {
-		acts := parseCodeActions(raw)
+	a.collectCodeActions(v, a.codeActionParams(v, kind), func(acts []lsp.CodeAction) {
 		if len(acts) == 0 {
 			a.setStatusMessage("No code actions of kind " + kind)
 			return
@@ -397,6 +423,10 @@ func (a *App) runCodeActionKind(v *EditorView, kind string) {
 }
 
 func (a *App) applyCodeAction(v *EditorView, ca lsp.CodeAction) {
+	c := ca.Client
+	if c == nil {
+		c = a.lsp.Client(v.buf())
+	}
 	run := func(ca lsp.CodeAction) {
 		if ca.Edit != nil {
 			a.applyWorkspaceEdit(*ca.Edit)
@@ -404,13 +434,17 @@ func (a *App) applyCodeAction(v *EditorView, ca lsp.CodeAction) {
 		if len(ca.Command) > 0 && string(ca.Command) != "null" {
 			var cmd lsp.Command
 			if json.Unmarshal(ca.Command, &cmd) == nil && cmd.Command != "" {
-				a.runLSPCommand(v, &cmd)
+				if c != nil && c != a.lsp.Client(v.buf()) {
+					// commands run on the server that offered the action
+					c.Call("workspace/executeCommand", map[string]any{"command": cmd.Command, "arguments": cmd.Arguments}, nil)
+				} else {
+					a.runLSPCommand(v, &cmd)
+				}
 			}
 		}
 	}
-	c := a.lsp.Client(v.buf())
 	if ca.Edit == nil && len(ca.Command) == 0 && c != nil && c.Supports("codeActionProvider.resolveProvider") {
-		a.lsp.Request(v.buf(), "codeAction/resolve", ca, func(raw json.RawMessage, err error) {
+		a.lsp.RequestTo(c, v.buf(), "codeAction/resolve", ca, func(raw json.RawMessage, err error) {
 			var res lsp.CodeAction
 			if err == nil && json.Unmarshal(raw, &res) == nil {
 				run(res)

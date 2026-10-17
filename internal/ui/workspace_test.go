@@ -387,3 +387,64 @@ func TestExternalFormatter(t *testing.T) {
 		t.Fatalf("formatted: %q", got)
 	}
 }
+
+// TestESLint needs TUI_ESLINT_DIR: a project with eslint installed, an eslint.config.js and main.js.
+func TestESLint(t *testing.T) {
+	dir := os.Getenv("TUI_ESLINT_DIR")
+	if dir == "" || os.Getenv("TUI_LSP") == "" {
+		t.Skip("set TUI_ESLINT_DIR and TUI_LSP")
+	}
+	tempWorkspace(t, nil)
+	setSandbox("")
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "main.js")}})
+	v := h.a.ActiveView()
+	has := func(src string) bool {
+		for _, d := range v.doc.Diags {
+			if d.Source == src || strings.Contains(d.Source, src) {
+				return true
+			}
+		}
+		return false
+	}
+	for i := 0; i < 200 && !has("eslint"); i++ {
+		time.Sleep(100 * time.Millisecond)
+		h.flush()
+	}
+	if !has("eslint") {
+		for _, c := range h.a.output.channels {
+			t.Logf("%s: %v", c.name, c.lines)
+		}
+		t.Fatalf("no eslint diagnostics: %+v", v.doc.Diags)
+	}
+	// ESLint's quick fixes show up in the code action menu and apply
+	v.SetCursor(buffer.Pos{Col: 1})
+	h.a.showCodeActions(v, "")
+	for i := 0; i < 100 && v.codeActions == nil; i++ {
+		time.Sleep(50 * time.Millisecond)
+		h.flush()
+	}
+	if v.codeActions == nil {
+		t.Fatal("no code actions")
+	}
+	var titles []string
+	pick := -1
+	for i, ca := range v.codeActions.actions {
+		titles = append(titles, ca.Title)
+		if strings.Contains(ca.Title, "no-var") && strings.HasPrefix(ca.Title, "Fix") {
+			pick = i
+		}
+	}
+	if pick < 0 {
+		t.Fatalf("no ESLint fix in %v", titles)
+	}
+	h.a.applyCodeAction(v, v.codeActions.actions[pick])
+	for i := 0; i < 100 && strings.HasPrefix(h.text(), "var"); i++ {
+		time.Sleep(50 * time.Millisecond)
+		h.flush()
+	}
+	if !strings.HasPrefix(h.text(), "let unused") {
+		t.Fatalf("fix not applied: %q", h.text())
+	}
+	v.buf().Undo()
+	h.a.lsp.ShutdownAll()
+}

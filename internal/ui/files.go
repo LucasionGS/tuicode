@@ -204,7 +204,11 @@ func (a *App) saveDocument(d *Document, _ bool) bool {
 	v := a.viewForDoc(d)
 	hasLSP := a.lsp != nil && a.lsp.Client(d.Buf) != nil && v != nil
 	format := func() {
-		if a.settings.Bool("editor.formatOnSave", lang) && hasLSP {
+		external := false
+		if v != nil {
+			_, external = a.externalFormatter(v)
+		}
+		if a.settings.Bool("editor.formatOnSave", lang) && v != nil && (hasLSP || external) {
 			a.formatDocument(v, nil, func() {
 				a.runSaveParticipants(d)
 				a.writeDocument(d)
@@ -266,14 +270,15 @@ func (a *App) runCodeActionsOnSave(v *EditorView, kinds []string, done func()) {
 			}
 		})
 	})
-	_, ok := a.lsp.Request(b, "textDocument/codeAction", params, func(raw json.RawMessage, err error) {
+	// every server of the file gets asked, so "source.fixAll.eslint" reaches ESLint
+	a.collectCodeActions(v, params, func(acts []lsp.CodeAction) {
 		if finished {
 			return
 		}
 		finished = true
 		timer.Stop()
-		if err == nil && b.Version() == version {
-			for _, ca := range parseCodeActions(raw) {
+		if b.Version() == version {
+			for _, ca := range acts {
 				if ca.Edit != nil {
 					a.applyWorkspaceEdit(*ca.Edit)
 				}
@@ -281,11 +286,6 @@ func (a *App) runCodeActionsOnSave(v *EditorView, kinds []string, done func()) {
 		}
 		a.runCodeActionsOnSave(v, rest, done)
 	})
-	if !ok {
-		finished = true
-		timer.Stop()
-		a.runCodeActionsOnSave(v, rest, done)
-	}
 }
 
 func (a *App) saveDocumentNoFormat(d *Document) bool {
