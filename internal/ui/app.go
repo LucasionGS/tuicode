@@ -446,6 +446,10 @@ func (a *App) Run() error {
 	s.EnableFocus()
 	s.SetCursorStyle(tcell.CursorStyleBlinkingBar)
 	a.width, a.height = s.Size()
+	// tell kitty an editor is running so conditional key mappings can pass shortcuts through
+	a.writeTTY("\x1b]1337;SetUserVar=in_editor=MQ==\x07")
+	a.suggestKittySetup()
+	defer a.writeTTY("\x1b]1337;SetUserVar=in_editor\x07")
 	a.applyTerminalTitle()
 
 	evCh := make(chan tcell.Event, 256)
@@ -1453,6 +1457,16 @@ func (a *App) windowTitle() string {
 		}
 	}
 	return strings.Join(keep, " - ")
+}
+
+// writeTTY writes a raw control sequence to the terminal.
+func (a *App) writeTTY(seq string) {
+	if a.screen == nil {
+		return
+	}
+	if tty, ok := a.screen.Tty(); ok && tty != nil {
+		_, _ = tty.Write([]byte(seq))
+	}
 }
 
 // attachScreen sets up a screen without running the event loop (used by tests).

@@ -2,8 +2,8 @@ package ui
 
 import (
 	"os"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"

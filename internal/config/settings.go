@@ -168,6 +168,7 @@ var Defaults = map[string]any{
 	"tuicode.lsp.enabled":                        true,
 	"tuicode.lsp.servers":                        map[string]any{},
 	"tuicode.lsp.promptInstall":                  true,
+	"tuicode.suggestKittyConfig":                 true,
 	"tuicode.mouse":                              true,
 	"tuicode.titleBar":                           true,
 	"tuicode.truecolor":                          "auto",

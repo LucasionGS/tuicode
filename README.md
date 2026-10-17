@@ -34,7 +34,11 @@ make install        # builds and copies the binary to ~/.local/bin
 ./build-linux.sh    # or build release binaries for linux x64 and arm64 into dist/
 ```
 
+### Terminal setup
+
 A [Nerd Font](https://www.nerdfonts.com) is recommended for the file and UI icons. tuicode detects one automatically and falls back to plain Unicode otherwise. Terminals that support the kitty keyboard protocol (kitty, foot, WezTerm, Ghostty, Alacritty) get every shortcut, including ones like `Ctrl+Shift+P` that classic terminals can't tell apart from `Ctrl+P`. `F1` always opens the command palette.
+
+**kitty users:** kitty's own `ctrl+shift` shortcuts (`kitty_mod`) swallow many VS Code shortcuts, for example `Ctrl+Shift+P`, `Ctrl+Shift+K` and `Ctrl+Shift+Enter`. tuicode sets kitty's `in_editor` user variable while it runs, so a few conditional mappings pass those keys through to tuicode only. Run **Preferences: Let VS Code Shortcuts Pass Through kitty** from the command palette to install them (it writes `~/.config/kitty/tuicode.conf` and includes it), then reload kitty's config.
 
 ## Usage
 
