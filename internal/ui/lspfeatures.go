@@ -513,6 +513,12 @@ func (a *App) formatDocument(v *EditorView, r *buffer.Range, done func()) {
 			done()
 		}
 	}
+	if r == nil || r.Empty() {
+		if cmd, ok := a.externalFormatter(v); ok {
+			a.formatExternal(v, cmd, done)
+			return
+		}
+	}
 	if a.lsp == nil || a.lsp.Client(v.buf()) == nil {
 		if done == nil {
 			a.setStatusMessage("There is no formatter for '" + v.doc.Lang.ID + "' files installed.")

@@ -352,3 +352,38 @@ func TestPrimarySelectionPaste(t *testing.T) {
 		t.Fatalf("middle click paste: %q", got)
 	}
 }
+
+func TestLineDiffEdits(t *testing.T) {
+	cases := [][2]string{
+		{"a\nb\nc\n", "a\nB\nc\n"},
+		{"a\nb\nc\n", "a\nc\n"},
+		{"a\nb\nc", "a\nb\nc\nd"},
+		{"a\nb\nc", "a"},
+		{"x", "y\nz\n"},
+		{"a\n\n\nb\n", "a\n\nb\n"},
+	}
+	for _, c := range cases {
+		b := buffer.NewFromString(c[0])
+		b.ApplyEdits(lineDiffEdits(strings.Split(c[0], "\n"), strings.Split(c[1], "\n")), nil, "")
+		if got := b.Text(); got != c[1] {
+			t.Errorf("%q -> %q: got %q", c[0], c[1], got)
+		}
+	}
+}
+
+func TestExternalFormatter(t *testing.T) {
+	if _, err := exec.LookPath("prettier"); err != nil {
+		t.Skip("prettier not installed")
+	}
+	src := "const a = {b:1,\n    c:2}\n"
+	dir := tempWorkspace(t, map[string]string{"a.ts": src, ".vscode/settings.json": `{"editor.defaultFormatter": "esbenp.prettier-vscode"}`})
+	h := newHarness(t, 120, 30, Options{Paths: []string{filepath.Join(dir, "a.ts")}})
+	h.a.RunCommand("editor.action.formatDocument", nil)
+	for i := 0; i < 300 && h.text() == src; i++ {
+		time.Sleep(20 * time.Millisecond)
+		h.flush()
+	}
+	if got := h.text(); got != "const a = { b: 1, c: 2 };\n" {
+		t.Fatalf("formatted: %q", got)
+	}
+}

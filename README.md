@@ -95,6 +95,8 @@ Settings use the same keys and JSON format as VS Code. tuicode reads, in order:
 
 Keybindings come from `~/.config/Code/User/keybindings.json` (unless `"tuicode.importVSCodeKeybindings": false`) and `~/.tuicode/keybindings.json`. Snippets come from VS Code's user snippets folder, `~/.tuicode/snippets` and `.vscode/*.code-snippets`. Extra color themes (VS Code theme JSON files) can go in `~/.tuicode/themes`.
 
+Formatter extensions named in `editor.defaultFormatter` run as their command line tools: Prettier (`esbenp.prettier-vscode`), Biome, Ruff, Black, shfmt, Taplo and clang-format. Everything else formats through the language server.
+
 tuicode specific settings:
 
 | Setting | Default | Description |
