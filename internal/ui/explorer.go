@@ -396,6 +396,16 @@ func (e *Explorer) handleKey(key, text string, isText bool) bool {
 		}
 		return false
 	}
+	if len(e.rows) == 0 {
+		if key == "escape" {
+			a.focusEditor()
+			return true
+		}
+		return false
+	}
+	if e.selected < 0 || e.selected >= len(e.rows) {
+		e.selected = 0
+	}
 	n := e.current()
 	switch key {
 	case "up":
@@ -409,7 +419,7 @@ func (e *Explorer) handleKey(key, text string, isText bool) bool {
 	case "pageup":
 		e.selected = max(e.selected-(e.rect.H-2), 0)
 	case "pagedown":
-		e.selected = min(e.selected+(e.rect.H-2), len(e.rows)-1)
+		e.selected = max(min(e.selected+(e.rect.H-2), len(e.rows)-1), 0)
 	case "home":
 		e.selected = 0
 	case "end":

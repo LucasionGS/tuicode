@@ -622,7 +622,7 @@ func (e *ExtensionsView) handleKey(key, text string, isText bool) bool {
 	case "up":
 		e.selected = max(e.selected-1, 0)
 	case "down":
-		e.selected = min(e.selected+1, len(sts)-1)
+		e.selected = max(min(e.selected+1, len(sts)-1), 0)
 	case "enter":
 		if e.selected < len(sts) && sts[e.selected].install != "" && !sts[e.selected].found {
 			e.app.terminals.runText(sts[e.selected].install)

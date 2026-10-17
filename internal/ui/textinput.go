@@ -39,6 +39,10 @@ func (t *TextInput) SelectAll() {
 }
 
 func (t *TextInput) selRange() (int, int, bool) {
+	t.cursor = clampInt(t.cursor, 0, len(t.text))
+	if t.anchor > len(t.text) {
+		t.anchor = len(t.text)
+	}
 	if t.anchor < 0 || t.anchor == t.cursor {
 		return t.cursor, t.cursor, false
 	}

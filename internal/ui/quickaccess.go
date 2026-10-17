@@ -280,6 +280,9 @@ func (a *App) gotoLineItems(q string) []QuickItem {
 		return []QuickItem{{Label: fmt.Sprintf("Current Line: %d, Character: %d. Type a line number between 1 and %d to navigate to.", cur.Line+1, cur.Col+1, b.LineCount())}}
 	}
 	parts := strings.FieldsFunc(q, func(r rune) bool { return r == ':' || r == ',' })
+	if len(parts) == 0 {
+		return []QuickItem{{Label: "Please enter a valid line number."}}
+	}
 	line, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return []QuickItem{{Label: "Please enter a valid line number."}}

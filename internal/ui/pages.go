@@ -84,7 +84,7 @@ func (w *WelcomePage) HandleKey(key, text string, isText bool) bool {
 	case "up":
 		w.selected = max(w.selected-1, 0)
 	case "down":
-		w.selected = min(w.selected+1, len(links)-1)
+		w.selected = max(min(w.selected+1, len(links)-1), 0)
 	case "enter":
 		if w.selected < len(links) {
 			links[w.selected].run()
@@ -342,12 +342,12 @@ func (p *KeybindingsPage) HandleKey(key, text string, isText bool) bool {
 		if !p.focusList {
 			p.focusList = true
 		} else {
-			p.selected = min(p.selected+1, len(p.rows)-1)
+			p.selected = max(min(p.selected+1, len(p.rows)-1), 0)
 		}
 	case "pageup":
 		p.selected = max(p.selected-10, 0)
 	case "pagedown":
-		p.selected = min(p.selected+10, len(p.rows)-1)
+		p.selected = max(min(p.selected+10, len(p.rows)-1), 0)
 	case "enter":
 		if p.focusList && p.selected < len(p.rows) {
 			p.recording = true
@@ -435,6 +435,8 @@ func (p *KeybindingsPage) Draw(r Rect) {
 	a.cv.Text(colWhen, hy, colSrc, "When", hst)
 	a.cv.Text(colSrc, hy, r.X+r.W, "Source", hst)
 	h := r.Y + r.H - hy - 1
+	p.selected = clampInt(p.selected, 0, max(len(p.rows)-1, 0))
+	p.scroll = clampInt(p.scroll, 0, max(len(p.rows)-h, 0))
 	keySt := styleFB(th.C("keybindingLabel.foreground"), th.OverColor("keybindingLabel.background", bgc))
 	for i := 0; i < h; i++ {
 		idx := p.scroll + i
@@ -670,12 +672,12 @@ func (p *SettingsPage) HandleKey(key, text string, isText bool) bool {
 		if !p.focusList {
 			p.focusList = true
 		} else {
-			p.selected = min(p.selected+1, len(p.keys)-1)
+			p.selected = max(min(p.selected+1, len(p.keys)-1), 0)
 		}
 	case "pageup":
 		p.selected = max(p.selected-5, 0)
 	case "pagedown":
-		p.selected = min(p.selected+5, len(p.keys)-1)
+		p.selected = max(min(p.selected+5, len(p.keys)-1), 0)
 	case "enter", "space":
 		if p.focusList && p.selected < len(p.keys) {
 			p.edit(p.keys[p.selected])
@@ -722,6 +724,8 @@ func (p *SettingsPage) Draw(r Rect) {
 	a.cv.Text(r.X+2, r.Y+2, lx, fmt.Sprintf("User  ·  %d settings", len(p.keys)), styleFB(th.C("descriptionForeground"), bgc))
 	y := r.Y + 4
 	h := (r.Y + r.H - y) / 3
+	p.selected = clampInt(p.selected, 0, max(len(p.keys)-1, 0))
+	p.scroll = clampInt(p.scroll, 0, max(len(p.keys)-h, 0))
 	for i := 0; i < h; i++ {
 		idx := p.scroll + i
 		if idx >= len(p.keys) {
